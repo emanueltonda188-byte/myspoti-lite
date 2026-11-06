@@ -28,6 +28,10 @@ const likedTracks = [
   { uri: 'spotify:track:aaa', name: 'Money Trees', artists: [{ name: 'Kendrick Lamar' }], durationMs: 308000 },
   { uri: 'spotify:track:bbb', name: 'Dior', artists: [{ name: 'Pop Smoke' }], durationMs: 213000 },
   { uri: 'spotify:track:ccc', name: 'Alright', artists: [{ name: 'Kendrick Lamar' }], durationMs: 219000 },
+  { uri: 'spotify:track:eee', name: 'Lofi Rain', artists: [{ name: 'Chillhop Music' }], durationMs: 180000 },
+  { uri: 'spotify:track:fff', name: 'California Love', artists: [{ name: '2Pac' }], durationMs: 240000 },
+  { uri: 'spotify:track:ggg', name: 'Party Rock Anthem', artists: [{ name: 'LMFAO' }], durationMs: 250000 },
+  { uri: 'spotify:track:hhh', name: 'Rainy Days', artists: [{ name: 'Unknown Artist' }], durationMs: 200000, year: 1994 },
 ];
 const playlistTracks = likedTracks.concat([
   { uri: 'spotify:track:ddd', name: 'HUMBLE.', artists: [{ name: 'Kendrick Lamar' }], durationMs: 177000 },
@@ -104,7 +108,10 @@ const moneyTrees = { id: 'x1', uri: 'spotify:track:aaa', title: 'Money Trees', a
 const unknownTrack = { id: 'x9', uri: 'spotify:track:zzz', title: 'No Such Song', artist: 'Nobody', durationMs: 200000 };
 
 mockHttp('example.com/music/index.json', function () {
-  return okJson([{ isrc: 'USUM71200905', title: 'Money Trees', artist: 'Kendrick Lamar', durationMs: 308000, file: 'money-trees.mp3' }]);
+  return okJson([
+    { isrc: 'USUM71200905', title: 'Money Trees', artist: 'Kendrick Lamar', durationMs: 308000, file: 'money-trees.mp3' },
+    { title: 'Lofi Rain', artist: 'Chillhop Music', durationMs: 180000, file: 'lofi-rain.mp3', mood: 'chill', year: 2019 },
+  ]);
 });
 mockHttp('archive.org', function (url) {
   // The status probe pings advancedsearch.php; song lookups get no match.
@@ -159,15 +166,15 @@ check('smart shuffle plays the playlist context', playedCalls.length === 1 && pl
   JSON.stringify(playedCalls));
 const order = playedCalls.length ? playedCalls[0].order : [];
 check('smart shuffle order has every song once',
-  order.length === 4 && new Set(order).size === 4 && order.indexOf('spotify:track:aaa') >= 0);
-check('smart shuffle notifies', notifications.some((t) => t.indexOf('Smart Shuffle on: 4 songs') === 0));
+  order.length === 8 && new Set(order).size === 8 && order.indexOf('spotify:track:aaa') >= 0);
+check('smart shuffle notifies', notifications.some((t) => t.indexOf('Smart Shuffle on: 8 songs') === 0));
 
 // 7. Smart Shuffle skips recently played songs
 resetAll();
 store.recent = ['spotify:track:aaa', 'spotify:track:bbb'];
 callHook('tap', { action: 'smart-shuffle' });
 const order2 = playedCalls.length ? playedCalls[0].order : [];
-check('smart shuffle skips recent songs', order2.length === 2 && order2.indexOf('spotify:track:aaa') < 0 && order2.indexOf('spotify:track:bbb') < 0,
+check('smart shuffle skips recent songs', order2.length === 6 && order2.indexOf('spotify:track:aaa') < 0 && order2.indexOf('spotify:track:bbb') < 0,
   JSON.stringify(order2));
 
 // 8. Data meter: stream minutes + recent memory
@@ -189,17 +196,97 @@ check('home returns a section', Array.isArray(home) && home[0] && home[0].type =
 const homeBlocks = (home[0] && home[0].blocks) || [];
 check('home has the shuffle-liked button', homeBlocks.some((b) => b.action === 'shuffle-liked'));
 const picks = homeBlocks.filter((b) => b.type === 'tracks')[0];
-check('home shows shuffle picks from Liked Songs', picks && picks.items && picks.items.length === 3, JSON.stringify(picks));
+check('home shows shuffle picks from Liked Songs', picks && picks.items && picks.items.length === 6, JSON.stringify(picks));
 
-// 10. Player button
-const player = callHook('player', moneyTrees);
-check('player hook adds one Smart Shuffle button',
-  Array.isArray(player) && player.length === 1 && player[0].action === 'smart-shuffle' && player[0].icon === 'shuffle');
+// 10. Player button: Mood mix when the song has a mood, Smart Shuffle when not
+const playerBtn = callHook('player', moneyTrees);
+check('player button is Mood mix for a rap song',
+  Array.isArray(playerBtn) && playerBtn.length === 1 && playerBtn[0].action === 'mood-mix' && playerBtn[0].label === 'Mood mix · Rap',
+  JSON.stringify(playerBtn));
+const playerBtn2 = callHook('player', unknownTrack);
+check('player button falls back to Smart Shuffle with no mood',
+  Array.isArray(playerBtn2) && playerBtn2.length === 1 && playerBtn2[0].action === 'smart-shuffle' && playerBtn2[0].label === 'Smart Shuffle',
+  JSON.stringify(playerBtn2));
 
 // 11. Status: live when Archive.org answers
 settings.ownLibrary = '';
 const status = callHook('status', {});
 check('status reports live', status && status.live === true, JSON.stringify(status));
+
+// 12. Moods: Home has a Moods section with counts from Liked Songs
+resetAll();
+settings.ownLibrary = 'https://example.com/music';
+const home2 = callHook('home', {});
+check('home returns two sections (Lite + Moods)', Array.isArray(home2) && home2.length === 2, JSON.stringify(home2.map((s) => s.title)));
+const moodSection = home2[1];
+const moodButtons = (moodSection.blocks || []).filter((b) => b.type === 'button');
+const moodLabels = moodButtons.map((b) => b.label);
+check('mood buttons show rap 4, chill 1, nostalgia 2, party 1',
+  moodLabels.indexOf('Rap · 4') >= 0 && moodLabels.indexOf('Chill · 1') >= 0 &&
+  moodLabels.indexOf('Nostalgia · 2') >= 0 && moodLabels.indexOf('Party · 1') >= 0,
+  JSON.stringify(moodLabels));
+check('no button for a mood with no songs', moodLabels.every((l) => l.indexOf('Sleep') !== 0 && l.indexOf('Sad') !== 0));
+
+// 13. Unstoppable: Home shows the offline-readiness count (folder matches only)
+const liteText = (home2[0].blocks || []).filter((b) => b.type === 'text').map((b) => b.text).join(' ');
+check('home readiness line counts folder matches', liteText.indexOf('Unstoppable: 2 of 7') >= 0, liteText);
+
+// 14. Tap a mood: Home re-renders with that mood's songs
+callHook('tap', { action: 'mood-rap' });
+check('tapping a mood remembers it', store['mood.selected'] === 'rap');
+const home3 = callHook('home', {});
+const rapSection = home3[1];
+check('mood view is titled for the mood', rapSection.title === 'Moods · Rap', rapSection.title);
+const rapTracks = (rapSection.blocks || []).filter((b) => b.type === 'tracks')[0];
+const rapUris = (rapTracks.items || []).map((i) => i.uri);
+check('rap view lists the 4 rap songs',
+  rapUris.length === 4 && rapUris.indexOf('spotify:track:aaa') >= 0 && rapUris.indexOf('spotify:track:fff') >= 0,
+  JSON.stringify(rapUris));
+check('rap view has a play button', (rapSection.blocks || []).some((b) => b.action === 'mood-play'));
+
+// 15. Play the mood: only that mood's songs, each once
+resetAll();
+store['mood.selected'] = 'rap';
+callHook('tap', { action: 'mood-play' });
+check('mood play uses the Liked Songs context', playedCalls.length === 1 && playedCalls[0].ctx === 'spotify:collection:tracks',
+  JSON.stringify(playedCalls));
+const moodOrder = playedCalls.length ? playedCalls[0].order : [];
+check('mood play has the 4 rap songs once', moodOrder.length === 4 && new Set(moodOrder).size === 4, JSON.stringify(moodOrder));
+check('mood play notifies the mood', notifications.some((t) => t.indexOf('Mood mix: Rap on: 4 songs') === 0));
+
+// 16. Mood mix from the player: more of the playing song's mood, from the list playing
+resetAll();
+fireEvent('playback', { type: 'start', track: { uri: 'spotify:track:aaa', title: 'Money Trees', artist: 'Kendrick Lamar' }, origin: 'spotify', playedMs: 0 });
+callHook('tap', { action: 'mood-mix' });
+check('mood mix plays from the current playlist', playedCalls.length === 1 && playedCalls[0].ctx === 'spotify:playlist:test123',
+  JSON.stringify(playedCalls));
+const mixOrder = playedCalls.length ? playedCalls[0].order : [];
+check('mood mix has the 5 rap songs of the playlist once', mixOrder.length === 5 && new Set(mixOrder).size === 5, JSON.stringify(mixOrder));
+check('mood mix notifies the mood', notifications.some((t) => t.indexOf('Mood mix: Rap on: 5 songs') === 0));
+
+// 17. Ahead: the next song is resolved early and remembered for Home
+resetAll();
+settings.ownLibrary = 'https://example.com/music';
+const aheadAns = callHook('audio-source', Object.assign({}, moneyTrees, { ahead: true }));
+check('ahead call still returns the small file', aheadAns && aheadAns.url === 'https://example.com/music/money-trees.mp3', JSON.stringify(aheadAns));
+check('ahead call remembers the next song', store.nextReady && store.nextReady.lite === true && store.nextReady.title === 'Money Trees',
+  JSON.stringify(store.nextReady));
+const aheadMiss = callHook('audio-source', Object.assign({}, unknownTrack, { ahead: true }));
+check('ahead call with no file returns null', aheadMiss === null);
+check('ahead miss is remembered as not lite', store.nextReady && store.nextReady.lite === false, JSON.stringify(store.nextReady));
+
+// 18. Clear the mood: Home shows the mood buttons again
+resetAll();
+store['mood.selected'] = 'rap';
+callHook('tap', { action: 'mood-clear' });
+check('clearing a mood forgets it', store['mood.selected'] === '');
+const home4 = callHook('home', {});
+check('cleared mood view has buttons again', (home4[1].blocks || []).some((b) => b.action === 'mood-rap'));
+
+// 19. Unstoppable button explains the download step
+resetAll();
+callHook('tap', { action: 'unstoppable' });
+check('unstoppable button tells how to download', notifications.some((t) => t.indexOf('Download') >= 0), JSON.stringify(notifications));
 
 console.log(failures === 0 ? '\nAll checks passed.' : '\n' + failures + ' check(s) failed.');
 process.exit(failures === 0 ? 0 : 1);
