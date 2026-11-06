@@ -4,9 +4,12 @@
 Usage:
     python3 tools/make_index.py ~/Music --out index.json
 
-- Reads MP3 tags (title, artist, duration, ISRC) when `mutagen` is installed
-  (`pip install mutagen`). Without it, falls back to "Artist - Title.mp3"
-  file names and no duration.
+- Reads MP3 tags (title, artist, duration, ISRC, genre, year) when `mutagen`
+  is installed (`pip install mutagen`). Without it, falls back to
+  "Artist - Title.mp3" file names and no duration.
+- Genre maps to a mood (Hip-Hop -> rap, Lo-Fi -> chill, ...), and a year
+  before 2000 adds nostalgia. The extension reads the "mood" and "year"
+  fields from index.json, so a song can be tagged exactly.
 - Upload index.json next to the MP3s in your web folder, then paste the
   folder URL in the extension's "Your own music folder URL" setting.
 - Only list files you own the rights to share. Keep them small: encode at
@@ -16,6 +19,29 @@ import argparse
 import json
 import os
 import sys
+
+# Same map as main.js GENRE_MOODS: ID3 genre -> mood id.
+GENRE_MOODS = {
+    "hip hop": "rap", "hip-hop": "rap", "rap": "rap", "trap": "rap",
+    "drill": "rap", "grime": "rap",
+    "lo-fi": "chill", "lofi": "chill", "ambient": "chill", "chill": "chill",
+    "chillout": "chill", "acoustic": "chill", "folk": "chill",
+    "jazz": "chill", "reggae": "chill",
+    "dance": "party", "edm": "party", "house": "party", "techno": "party",
+    "party": "party", "afrobeat": "party", "afrobeats": "party",
+    "classical": "focus", "piano": "focus", "instrumental": "focus",
+    "study": "focus",
+    "pop": "happy", "gospel": "happy",
+    "soul": "love", "r&b": "love", "rnb": "love",
+    "blues": "sad", "lullaby": "sleep",
+    "rock": "workout", "metal": "workout",
+}
+
+
+def genre_to_mood(genre):
+    if not genre:
+        return None
+    return GENRE_MOODS.get(genre.strip().lower())
 
 
 def parse_filename(name):
@@ -38,7 +64,8 @@ def read_tags(path):
     if audio is None:
         return None
     tags = audio.tags or {}
-    title = artist = isrc = None
+    title = artist = isrc = genre = None
+    year = None
     for key in ("TIT2", "©nam", "TITLE"):
         if key in tags:
             title = str(tags[key][0])
@@ -51,11 +78,23 @@ def read_tags(path):
         if key in tags:
             isrc = str(tags[key][0])
             break
+    for key in ("TCON", "©gen", "GENRE"):
+        if key in tags:
+            genre = str(tags[key][0])
+            break
+    for key in ("TDRC", "TDAT", "TYER", "©day", "YEAR", "DATE"):
+        if key in tags:
+            try:
+                year = int(str(tags[key][0])[:4])
+            except (ValueError, TypeError):
+                year = None
+            break
     duration_ms = None
     info = getattr(audio, "info", None)
     if info is not None and getattr(info, "length", None):
         duration_ms = int(round(info.length * 1000))
-    return {"title": title, "artist": artist, "isrc": isrc, "duration_ms": duration_ms}
+    return {"title": title, "artist": artist, "isrc": isrc, "duration_ms": duration_ms,
+            "genre": genre, "year": year}
 
 
 def main():
@@ -74,17 +113,30 @@ def main():
         artist, title = parse_filename(name)
         duration_ms = None
         isrc = None
+        genre = None
+        year = None
         tags = read_tags(path)
         if tags:
             title = tags["title"] or title
             artist = tags["artist"] or artist
             isrc = tags["isrc"]
             duration_ms = tags["duration_ms"]
+            genre = tags["genre"]
+            year = tags["year"]
         entry = {"title": title, "artist": artist, "file": name}
         if duration_ms:
             entry["durationMs"] = duration_ms
         if isrc:
             entry["isrc"] = isrc
+        mood = genre_to_mood(genre)
+        if year:
+            entry["year"] = year
+            if year < 2000:
+                entry["mood"] = [mood, "nostalgia"] if mood else "nostalgia"
+            elif mood:
+                entry["mood"] = mood
+        elif mood:
+            entry["mood"] = mood
         entries.append(entry)
 
     with open(args.out, "w", encoding="utf-8") as f:
