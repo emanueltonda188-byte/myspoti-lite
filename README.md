@@ -1,10 +1,12 @@
 # MySpoti Lite
 
-A [Myspoti](https://github.com/kota-zo/myspoti) extension for low-data listening: small audio first, small downloads for offline, a data meter, and a true no-repeat Smart Shuffle.
+A [Myspoti](https://github.com/kota-zo/myspoti) extension for low-data listening: small audio first, unstoppable playback, small downloads for offline, a data meter, a true no-repeat Smart Shuffle, and Moods.
 
 ## What it does
 
 - **Small audio first.** When a small file of the song exists — in your own music folder, or as a free legal copy on Archive.org — it plays that instead of the full Spotify stream. A 3-minute song at ~96 kbps is about 2 MB instead of 4–5 MB. When no small file exists, it steps aside and Spotify streams as usual.
+- **Unstoppable.** Myspoti asks for the next song 10 s after the one before starts, and the extension resolves its small file right then, so the next song starts at once — on Wi-Fi Myspoti also pre-reads the first 512 KB of it. A small file is only ~2 MB, so it buffers fully in seconds, and a data drop mid-song does not stop it. Home shows how many of your Liked Songs have a small file, and the **Make it unstoppable** button tells you how to download the list: downloaded songs play with data fully off.
+- **Moods.** Rap, Chill, Nostalgia, Party, Workout, Focus, Sleep, Happy, Sad and Love. Home has a Moods section: tap one and it shows all its songs from your Liked Songs, with a button to play them shuffled. In the player, the Smart Shuffle button becomes **Mood mix** when the song playing has a mood — it plays more of that mood from whatever playlist, album or Liked Songs is playing. Moods are guessed from artist, title, album, genre and year (a song before 2000 is nostalgia); your own music folder can tag a song's mood exactly (below).
 - **Offline.** The same small files can be downloaded (pick **Small** quality in Myspoti → Downloads) and then play with no data at all. Downloads are encrypted and kept by Myspoti, like any other download.
 - **Data meter.** Estimates today's data use (streams vs lite files) on Home, and warns once a day when you pass your limit. The numbers are estimates, not a meter reading from Android.
 - **Smart Shuffle.** A **Smart Shuffle** button in the player shuffles the current playlist, album, artist top tracks or Liked Songs with a real shuffle, skipping songs you played recently, so nothing repeats until every song has played once. Home also has a **Smart Shuffle Liked Songs** button and a few shuffle picks.
@@ -13,6 +15,8 @@ A [Myspoti](https://github.com/kota-zo/myspoti) extension for low-data listening
 
 - **It cannot download Spotify's own streams.** Spotify audio is locked (DRM). Only files from your own folder or free catalogues go offline. If a song has no small file anywhere, it still needs data to stream.
 - **It cannot force Spotify's stream to a lower bitrate.** For streams, the real data saver is Myspoti itself: turn on **Data Saver** and set quality to **Low** in Myspoti → Settings → Playback (see setup below).
+- **It cannot make a Spotify stream unstoppable.** A song with no small file still streams, and a stream can stall when the data dies. The fix is a small file for that song (your folder) or a downloaded list — the extension can only make unstoppable the songs it has a small file for.
+- **Moods are guesses.** They come from artist, title, album, genre and year, so a song can land in the wrong mood or in none at all. Your folder's `index.json` can set a song's mood exactly with a `"mood"` field (below), and `make_index.py` writes it from the MP3's genre tag.
 - **Myspoti blocks ads, which is against Spotify's Terms of Use.** Spotify may suspend accounts that do it. That is Myspoti's own warning, not mine — use it at your own risk.
 - **Archive.org matches are rare** for new commercial songs. It is a bonus for older, live and public-domain recordings, not the main source. Your own folder is the main source.
 
@@ -41,14 +45,15 @@ If you have MP3s of your own — your own recordings, songs you own as files —
 
 ```json
 [
-  { "isrc": "USUM71200905", "title": "Money Trees", "artist": "Kendrick Lamar", "durationMs": 308000, "file": "money-trees.mp3" },
-  { "title": "Dior", "artist": "Pop Smoke", "durationMs": 213000, "file": "dior.mp3" }
+  { "isrc": "USUM71200905", "title": "Money Trees", "artist": "Kendrick Lamar", "durationMs": 308000, "file": "money-trees.mp3", "mood": "rap", "year": 2012 },
+  { "title": "Dior", "artist": "Pop Smoke", "durationMs": 213000, "file": "dior.mp3", "mood": ["rap", "party"] }
 ]
 ```
 
 - `isrc` is best (exact match). Without it, title + artist must match exactly, and `durationMs` must be within 3 seconds when present.
+- `mood` is one mood id, or a list of them: `rap`, `chill`, `nostalgia`, `party`, `workout`, `focus`, `sleep`, `happy`, `sad`, `love`. A `year` before 2000 also counts as nostalgia.
 - `file` is the file name in the same folder. Keep the files small — encode at 96 kbps MP3 and a 3-minute song is ~2 MB.
-- Make the index with the helper: `python3 tools/make_index.py ~/Music --out index.json` (reads MP3 tags when `mutagen` is installed, otherwise uses `Artist - Title.mp3` file names).
+- Make the index with the helper: `python3 tools/make_index.py ~/Music --out index.json` (reads MP3 tags when `mutagen` is installed, otherwise uses `Artist - Title.mp3` file names). It writes `mood` from the genre tag (Hip-Hop → rap, Lo-Fi → chill, ...) and `year` from the date tag.
 
 ## Settings
 

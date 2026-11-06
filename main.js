@@ -1,21 +1,35 @@
-// MySpoti Lite 1.0.0 — a Myspoti extension for low-data listening.
+// MySpoti Lite 1.1.0 — a Myspoti extension for low-data listening.
 //
 // What it does:
 //   - Small audio first: when a small file of the song exists (your own music
 //     folder, or a free legal copy on Archive.org), it plays that instead of
 //     the full Spotify stream. Otherwise it steps aside and Spotify plays.
+//   - Unstoppable: Myspoti asks for the next song 10 s after the one before
+//     starts (track.ahead), so the small file is resolved early and the song
+//     starts at once; a small file buffers fully in seconds, so a data drop
+//     mid-song does not stop it. Downloaded lists play with data fully off.
 //   - Offline: the same small files can be downloaded (pick "Small" quality
 //     in Myspoti Downloads) and then play with no data at all.
 //   - Data meter: estimates today's data use and warns past your daily limit.
 //   - Smart Shuffle: a player button that shuffles the current list with a
 //     real shuffle and no repeats until every song has played once.
+//   - Moods: Rap, Chill, Nostalgia, Party, Workout, Focus, Sleep, Happy,
+//     Sad and Love. Tap a mood on Home to see its songs from Liked Songs;
+//     the player button becomes "Mood mix" and plays more of the mood of
+//     the song that is playing, from whatever list is playing.
 //
 // What it cannot do (honest limits, also in README.md):
 //   - It cannot download Spotify's own streams. Spotify audio is locked
 //     (DRM); only files from your own folder or free catalogues go offline.
 //   - It cannot force Spotify's stream to a lower bitrate. For streams, use
 //     Myspoti's own Data Saver + Low quality in Settings, Playback.
-myspoti.log('myspoti-lite 1.0.0 loaded');
+//   - It cannot make a Spotify stream unstoppable. A song with no small file
+//     still streams, and a stream can stall when the data dies. The fix is
+//     a small file for it (your folder) or a downloaded list.
+//   - Moods are guessed from artist, title, album, genre and year. A song
+//     that matches nothing shows under no mood; your folder's index.json
+//     can tag a song's mood exactly (see README).
+myspoti.log('myspoti-lite 1.1.0 loaded');
 
 var EXT_ID = 'ke.tonda.myspoti_lite';
 var INDEX_TTL_MS = 60 * 60 * 1000;     // re-read your folder index hourly
@@ -94,6 +108,7 @@ myspoti.on('playback', function (e) {
     if (!e || !e.track) return;
     var uri = e.track.uri || '';
     if (e.type === 'start') {
+      currentTrack = e.track || null;
       lastProgress = { uri: uri, ms: 0 };
       var d0 = loadDay();
       if (e.origin === 'spotify') d0.streamed = (d0.streamed || 0) + 1;
@@ -139,6 +154,182 @@ function rememberPlayed(uri) {
     if (recent[i] !== uri) out.push(recent[i]);
   }
   storeSet('recent', out);
+}
+
+var currentTrack = null; // last song that started playing (for Mood mix)
+
+// ---- Moods ---------------------------------------------------------------
+// Ten moods, guessed from artist, title, album, genre and year. A song can
+// carry several moods. Your folder's index.json can tag a song exactly with
+// a "mood" field (one mood, or a list); "year" before 2000 also means
+// nostalgia. Nothing here is stored per song: it is computed when needed.
+
+var MOODS = [
+  { id: 'rap', label: 'Rap', keywords: ['rap', 'hip hop', 'hiphop', 'trap', 'drill', 'freestyle', 'cypher', 'mixtape'],
+    artists: ['kendrick lamar', 'eminem', 'drake', 'j cole', 'pop smoke', 'travis scott', '21 savage', 'lil baby', 'future', 'kanye west', 'jay z', 'nas', 'tupac', '2pac', 'notorious b i g', 'biggie', 'snoop dogg', 'ice cube', 'dr dre', 'nicki minaj', 'cardi b', 'megan thee stallion', 'doja cat', 'lil wayne', 'rick ross', 'meek mill', 'lil durk', 'polo g', 'central cee', 'stormzy', 'dave', 'skepta'] },
+  { id: 'chill', label: 'Chill', keywords: ['lofi', 'lo fi', 'chill', 'acoustic', 'unplugged', 'mellow', 'calm', 'ambient', 'soft', 'slow', 'coffee', 'sunday morning', 'bedroom'], artists: [] },
+  { id: 'nostalgia', label: 'Nostalgia', keywords: ['old school', 'oldschool', 'classic', 'throwback', 'retro', 'vintage', '90s', '80s', '70s', 'greatest hits', 'remember', 'back in the day'],
+    artists: ['tupac', '2pac', 'notorious b i g', 'biggie', 'bob marley', 'michael jackson', 'whitney houston', 'queen', 'the beatles', 'abba', 'elton john', 'madonna', 'prince', 'stevie wonder', 'marvin gaye', 'aretha franklin', 'james brown', 'fela kuti', 'brenda fassie', 'lucky dube'] },
+  { id: 'party', label: 'Party', keywords: ['party', 'club', 'dance', 'turn up', 'lit', 'shots', 'weekend', 'fiesta', 'celebration'], artists: [] },
+  { id: 'workout', label: 'Workout', keywords: ['workout', 'gym', 'running', 'training', 'pump', 'beast mode', 'energy', 'adrenaline'], artists: [] },
+  { id: 'focus', label: 'Focus', keywords: ['focus', 'study', 'concentration', 'deep work', 'instrumental', 'piano', 'classical', 'study beats', 'lofi beats'], artists: [] },
+  { id: 'sleep', label: 'Sleep', keywords: ['sleep', 'lullaby', 'dream', 'insomnia', 'rain sounds', 'white noise', 'night sounds'], artists: [] },
+  { id: 'happy', label: 'Happy', keywords: ['happy', 'sunshine', 'good vibes', 'feel good', 'summer', 'smile', 'joy', 'bright'], artists: [] },
+  { id: 'sad', label: 'Sad', keywords: ['sad', 'heartbreak', 'broken', 'tears', 'lonely', 'miss you', 'goodbye', 'pain', 'cry', 'hurt'], artists: [] },
+  { id: 'love', label: 'Love', keywords: ['love', 'romantic', 'romance', 'baby', 'darling', 'forever', 'wedding', 'valentine', 'my heart'], artists: [] }
+];
+
+var GENRE_MOODS = {
+  'hip hop': 'rap', 'hip-hop': 'rap', 'rap': 'rap', 'trap': 'rap', 'drill': 'rap', 'grime': 'rap',
+  'lo-fi': 'chill', 'lofi': 'chill', 'ambient': 'chill', 'chill': 'chill', 'chillout': 'chill',
+  'acoustic': 'chill', 'folk': 'chill', 'jazz': 'chill', 'reggae': 'chill',
+  'dance': 'party', 'edm': 'party', 'house': 'party', 'techno': 'party', 'party': 'party',
+  'afrobeat': 'party', 'afrobeats': 'party',
+  'classical': 'focus', 'piano': 'focus', 'instrumental': 'focus', 'study': 'focus',
+  'pop': 'happy', 'gospel': 'happy',
+  'soul': 'love', 'r&b': 'love', 'rnb': 'love',
+  'blues': 'sad', 'lullaby': 'sleep',
+  'rock': 'workout', 'metal': 'workout'
+};
+
+function moodLabel(id) { for (var i = 0; i < MOODS.length; i++) if (MOODS[i].id === id) return MOODS[i].label; return id; }
+function isMoodId(id) { for (var i = 0; i < MOODS.length; i++) if (MOODS[i].id === id) return true; return false; }
+function trackTitle(t) { return (t && (t.title || t.name)) || ''; }
+function trackArtists(t) {
+  if (!t) return [];
+  if (Array.isArray(t.artists)) {
+    var out = [];
+    for (var i = 0; i < t.artists.length; i++) if (t.artists[i] && t.artists[i].name) out.push(t.artists[i].name);
+    return out;
+  }
+  if (t.artist) return [t.artist];
+  return [];
+}
+function trackAlbum(t) {
+  if (!t || !t.album) return '';
+  if (typeof t.album === 'string') return t.album;
+  return t.album.name || '';
+}
+function trackYear(t) {
+  if (!t) return null;
+  if (t.year) return Number(t.year) || null;
+  if (t.album && typeof t.album === 'object') {
+    if (t.album.year) return Number(t.album.year) || null;
+    if (t.album.release_date) { var y = parseInt(String(t.album.release_date).slice(0, 4), 10); return y || null; }
+  }
+  return null;
+}
+function hasWord(text, kw) {
+  // Exact word for short keywords (baby, sad, lit...), prefix for longer
+  // ones so plurals match (dreams, classics) without matching "trapped".
+  var words = String(text || '').split(' ');
+  for (var i = 0; i < words.length; i++) {
+    var w = words[i];
+    if (!w) continue;
+    if (kw.length <= 4) { if (w === kw) return true; }
+    else if (w === kw || w.indexOf(kw) === 0) return true;
+  }
+  return false;
+}
+function matchesKeyword(text, kw) {
+  var t = norm(text);
+  if (kw.indexOf(' ') >= 0) return (' ' + t + ' ').indexOf(' ' + kw + ' ') >= 0;
+  return hasWord(t, kw);
+}
+
+var ownMapCache = { at: 0, map: null };
+function ownEntryMap() {
+  var list = loadOwnIndex();
+  if (!list) return null;
+  var at = storeGet('ownIndexAt', 0);
+  if (ownMapCache.map && ownMapCache.at === at) return ownMapCache.map;
+  var map = {};
+  for (var i = 0; i < list.length; i++) {
+    var e = list[i];
+    if (!e) continue;
+    if (e.isrc) map['isrc:' + String(e.isrc).toUpperCase()] = e;
+    map['t:' + norm(e.title) + '|' + norm(e.artist)] = e;
+  }
+  ownMapCache = { at: at, map: map };
+  return map;
+}
+function ownEntryFor(track) {
+  var map = ownEntryMap();
+  if (!map || !track) return null;
+  if (track.isrc) {
+    var byIsrc = map['isrc:' + String(track.isrc).toUpperCase()];
+    if (byIsrc) return byIsrc;
+  }
+  var artists = trackArtists(track);
+  return map['t:' + norm(trackTitle(track)) + '|' + norm(artists[0] || '')] || null;
+}
+
+function moodsOf(track) {
+  if (!track) return [];
+  var out = [];
+  function add(id) { if (isMoodId(id) && out.indexOf(id) < 0) out.push(id); }
+  // 1. Your folder's own tag wins: index.json "mood" (+ "genre", "year").
+  var entry = null;
+  try { entry = ownEntryFor(track); } catch (e) { entry = null; }
+  if (entry) {
+    var ms = entry.mood;
+    if (typeof ms === 'string') ms = [ms];
+    if (Array.isArray(ms)) {
+      for (var i = 0; i < ms.length; i++) add(String(ms[i]).toLowerCase().replace(/[^a-z]+/g, ''));
+    }
+    if (entry.genre) { var g = GENRE_MOODS[norm(entry.genre)]; if (g) add(g); }
+    if (entry.year && Number(entry.year) < 2000) add('nostalgia');
+    if (out.length) return out;
+  }
+  // 2. Genre on the Spotify track itself, when present.
+  if (track.genre) { var g2 = GENRE_MOODS[norm(track.genre)]; if (g2) add(g2); }
+  // 3. Keywords and artist names on title + artist + album.
+  var text = norm(trackTitle(track) + ' ' + trackArtists(track).join(' ') + ' ' + trackAlbum(track));
+  for (var m = 0; m < MOODS.length; m++) {
+    var mood = MOODS[m];
+    for (var k = 0; k < mood.keywords.length; k++) {
+      if (matchesKeyword(text, mood.keywords[k])) { add(mood.id); break; }
+    }
+    if (out.indexOf(mood.id) < 0) {
+      for (var a = 0; a < mood.artists.length; a++) {
+        if (matchesKeyword(text, mood.artists[a])) { add(mood.id); break; }
+      }
+    }
+  }
+  // 4. Old songs are nostalgia.
+  var y = trackYear(track);
+  if (y && y < 2000) add('nostalgia');
+  return out;
+}
+
+function likedTracksAll() {
+  try {
+    var page = myspoti.spotify.library.likedTracks(0, 50);
+    return (page && page.items) || [];
+  } catch (e) { return []; }
+}
+function likedSnapshot() {
+  // One read of Liked Songs, reused for shuffle picks, moods and the
+  // offline-readiness count, so Home does not ask three times.
+  var liked = likedTracksAll();
+  var items = [];
+  var ready = 0;
+  for (var i = 0; i < liked.length; i++) {
+    var t = liked[i];
+    var entry = null;
+    try { entry = ownEntryFor(t); } catch (e) { entry = null; }
+    if (entry) ready++;
+    items.push({ track: t, moods: moodsOf(t) });
+  }
+  return { liked: liked, items: items, ready: ready, total: liked.length };
+}
+function moodTracks(id) {
+  var snap = likedSnapshot();
+  var out = [];
+  for (var i = 0; i < snap.items.length; i++) {
+    if (snap.items[i].moods.indexOf(id) >= 0) out.push(snap.items[i].track);
+  }
+  return out;
 }
 
 // ---- Small-file sources ---------------------------------------------------
@@ -273,7 +464,16 @@ function findSmallFile(track) {
 
 myspoti.provide('audio-source', function (track) {
   if (getSetting('quality', 'Smallest') === 'Best') return null;
+  // Myspoti asks for the next song 10 s after the one before starts
+  // (track.ahead === true). Resolve it now, while there is time: the answer
+  // is kept and played as it is when the song comes, and on Wi-Fi Myspoti
+  // also pre-reads the first 512 KB of the file. Remember it for Home.
+  var ahead = !!(track && track.ahead);
   var f = findSmallFile(track);
+  if (ahead) {
+    try { storeSet('nextReady', { title: trackTitle(track), artist: (trackArtists(track)[0] || ''), lite: !!f, at: Date.now() }); } catch (e) {}
+    if (f) myspoti.log('ahead: small file ready for ' + trackTitle(track));
+  }
   if (!f) return null;
   var ans = { url: f.url, mimeType: f.mime, codec: 'mp3', source: f.label };
   if (track.durationMs) ans.durationMs = track.durationMs;
@@ -329,15 +529,57 @@ function unplayedFirst(uris) {
   return uris; // everything played: start a new round
 }
 
-function playShuffled(contextUri, uris) {
+function playShuffled(contextUri, uris, what) {
   var player = spotifyPlayer();
   if (!player) { myspoti.notify('Smart Shuffle needs Myspoti 2.0.2 or newer'); return false; }
   var order = shuffleUris(unplayedFirst(uris));
   player.play(contextUri, order[0], 0, 0, order);
   try { player.setShuffle(true); } catch (e) {}
-  myspoti.notify('Smart Shuffle on: ' + order.length + ' songs, no repeats');
+  myspoti.notify((what || 'Smart Shuffle') + ' on: ' + order.length + ' songs, no repeats');
   return true;
 }
+
+function playMood() {
+  try {
+    var selected = storeGet('mood.selected', '');
+    if (!selected || !isMoodId(selected)) { myspoti.notify('Pick a mood first'); return; }
+    var uris = trackUris(moodTracks(selected));
+    if (uris.length < 2) { myspoti.notify('Only ' + uris.length + ' ' + moodLabel(selected) + ' song' + (uris.length === 1 ? '' : 's') + ' in Liked Songs'); return; }
+    playShuffled('spotify:collection:tracks', uris, 'Mood mix: ' + moodLabel(selected));
+  } catch (e) {
+    myspoti.log('play mood failed: ' + e);
+    myspoti.notify('Could not play that mood');
+  }
+}
+
+function moodMix() {
+  try {
+    var t = currentTrack;
+    if (!t || !trackTitle(t)) { myspoti.notify('Play a song first, then Mood mix'); return; }
+    var moods = moodsOf(t);
+    if (!moods.length) { myspoti.notify('No mood for this song yet'); return; }
+    var player = spotifyPlayer();
+    if (!player) { myspoti.notify('Mood mix needs Myspoti 2.0.2 or newer'); return; }
+    var st = null;
+    try { st = player.state(); } catch (e) { st = null; }
+    var ctx = st && st.contextUri;
+    if (!ctx) { myspoti.notify('Play a playlist, album or Liked Songs first, then Mood mix'); return; }
+    var mood = moods[0];
+    var tracks = tracksOf(ctx) || [];
+    var same = [];
+    for (var i = 0; i < tracks.length; i++) {
+      if (moodsOf(tracks[i]).indexOf(mood) >= 0) same.push(tracks[i]);
+    }
+    var uris = trackUris(same);
+    if (uris.length < 2) { myspoti.notify('Only ' + uris.length + ' ' + moodLabel(mood) + ' song' + (uris.length === 1 ? '' : 's') + ' here'); return; }
+    playShuffled(ctx, uris, 'Mood mix: ' + moodLabel(mood));
+  } catch (e) {
+    myspoti.log('mood mix failed: ' + e);
+    myspoti.notify('Mood mix could not start here');
+  }
+}
+
+function refreshHome() { try { if (myspoti.ui && myspoti.ui.refresh) myspoti.ui.refresh('home'); } catch (e) {} }
 
 function tracksOf(contextUri) {
   var sp = myspoti.spotify;
@@ -389,20 +631,72 @@ function shuffleLiked() {
 // ---- Player button, Home, taps, status ------------------------------------
 
 myspoti.provide('player', function (track) {
+  // One player button per extension: when the song playing has a mood, the
+  // button becomes Mood mix for that mood; otherwise it is Smart Shuffle.
+  var moods = track ? moodsOf(track) : [];
+  if (moods.length) {
+    return [{ type: 'button', label: 'Mood mix · ' + moodLabel(moods[0]), icon: 'music', action: 'mood-mix' }];
+  }
   return [{ type: 'button', label: 'Smart Shuffle', icon: 'shuffle', action: 'smart-shuffle' }];
 });
+
+function moodsSection(snap) {
+  var selected = storeGet('mood.selected', '');
+  var groups = {};
+  for (var i = 0; i < snap.items.length; i++) {
+    var ms = snap.items[i].moods;
+    for (var j = 0; j < ms.length; j++) {
+      if (!groups[ms[j]]) groups[ms[j]] = [];
+      groups[ms[j]].push(snap.items[i].track);
+    }
+  }
+  if (selected && groups[selected] && groups[selected].length) {
+    var tracks = groups[selected];
+    var items = [];
+    for (var k = 0; k < tracks.length && k < 20; k++) {
+      items.push({ uri: tracks[k].uri, title: trackTitle(tracks[k]), subtitle: trackArtists(tracks[k]).join(', ') });
+    }
+    return { type: 'section', title: 'Moods · ' + moodLabel(selected), blocks: [
+      { type: 'text', text: moodLabel(selected) + ' · ' + tracks.length + ' song' + (tracks.length === 1 ? '' : 's') + ' from Liked Songs.' },
+      { type: 'tracks', title: moodLabel(selected), items: items },
+      { type: 'button', label: 'Play ' + moodLabel(selected) + ' shuffled', icon: 'shuffle', action: 'mood-play' },
+      { type: 'button', label: 'All moods', icon: 'music', action: 'mood-clear' }
+    ] };
+  }
+  var blocks = [{ type: 'text', text: 'Tap a mood to see its songs from Liked Songs.' }];
+  var shown = 0;
+  for (var m = 0; m < MOODS.length && shown < 10; m++) {
+    var id = MOODS[m].id;
+    if (groups[id] && groups[id].length) {
+      blocks.push({ type: 'button', label: moodLabel(id) + ' · ' + groups[id].length, icon: 'music', action: 'mood-' + id });
+      shown++;
+    }
+  }
+  if (!shown) blocks.push({ type: 'text', text: 'No moods found yet — like some songs first.' });
+  return { type: 'section', title: 'Moods', blocks: blocks };
+}
 
 myspoti.provide('home', function () {
   var d = loadDay();
   var line = 'Today: ~' + Math.round(dayTotalMb(d)) + ' MB · ' + (d.streamed || 0) + ' streamed · ' + (d.liteSongs || 0) + ' lite';
+  var snap = null;
+  try { snap = likedSnapshot(); } catch (e) { snap = { liked: [], items: [], ready: 0, total: 0 }; }
+  var offLine = snap.total
+    ? 'Unstoppable: ' + snap.ready + ' of ' + snap.total + ' Liked Songs have a small file. Download Liked Songs in Myspoti and they play with data off.'
+    : 'Unstoppable: like some songs, add your MP3 folder, and they can play with data off.';
+  var next = storeGet('nextReady', null);
+  if (next && next.title && (Date.now() - (next.at || 0)) < 10 * 60 * 1000) {
+    offLine += ' Next up: ' + next.title + (next.lite ? ' — small file ready.' : ' — streams on Spotify.');
+  }
   var blocks = [{ type: 'section', title: 'MySpoti Lite — low data', blocks: [
     { type: 'text', text: line + '. Small files play first; downloads work offline.' },
+    { type: 'text', text: offLine },
     { type: 'button', label: 'Smart Shuffle Liked Songs', icon: 'shuffle', action: 'shuffle-liked' },
+    { type: 'button', label: 'Make it unstoppable', icon: 'download', action: 'unstoppable' },
     { type: 'button', label: 'How much data today?', icon: 'chart', action: 'show-data' }
   ] }];
   try {
-    var page = myspoti.spotify.library.likedTracks(0, 50);
-    var liked = (page && page.items) || [];
+    var liked = snap.liked;
     if (liked.length) {
       var picks = shuffleUris(liked).slice(0, 6);
       var items = [];
@@ -416,6 +710,8 @@ myspoti.provide('home', function () {
       if (items.length) blocks[0].blocks.push({ type: 'tracks', title: 'Shuffle picks from Liked Songs', items: items });
     }
   } catch (e) { /* Home still shows without picks */ }
+  // Moods is the second Home section (the quota is two per extension).
+  blocks.push(moodsSection(snap));
   return blocks;
 });
 
@@ -424,6 +720,16 @@ myspoti.provide('tap', function (e) {
     if (!e) return;
     if (e.action === 'smart-shuffle') smartShuffle();
     else if (e.action === 'shuffle-liked') shuffleLiked();
+    else if (e.action === 'mood-mix') moodMix();
+    else if (e.action === 'mood-play') playMood();
+    else if (e.action === 'mood-clear') { storeSet('mood.selected', ''); refreshHome(); }
+    else if (e.action && e.action.indexOf('mood-') === 0) {
+      var id = e.action.slice(5);
+      if (isMoodId(id)) { storeSet('mood.selected', id); refreshHome(); }
+    }
+    else if (e.action === 'unstoppable') {
+      myspoti.notify('Unstoppable: in Myspoti open Liked Songs or a playlist and tap Download — the extension gives tiny files, so the whole list stays small. Downloaded songs play with data off. Lite files also buffer in seconds, so a data drop rarely stops one mid-song.');
+    }
     else if (e.action === 'show-data') {
       var d = loadDay();
       myspoti.notify('Today: ~' + Math.round(dayTotalMb(d)) + ' MB · ' + (d.streamed || 0) + ' streamed · ' + (d.liteSongs || 0) + ' lite · ' + (d.downloaded || 0) + ' downloaded');
