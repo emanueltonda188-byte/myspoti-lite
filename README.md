@@ -1,0 +1,84 @@
+# MySpoti Lite
+
+A [Myspoti](https://github.com/kota-zo/myspoti) extension for low-data listening: small audio first, small downloads for offline, a data meter, and a true no-repeat Smart Shuffle.
+
+## What it does
+
+- **Small audio first.** When a small file of the song exists — in your own music folder, or as a free legal copy on Archive.org — it plays that instead of the full Spotify stream. A 3-minute song at ~96 kbps is about 2 MB instead of 4–5 MB. When no small file exists, it steps aside and Spotify streams as usual.
+- **Offline.** The same small files can be downloaded (pick **Small** quality in Myspoti → Downloads) and then play with no data at all. Downloads are encrypted and kept by Myspoti, like any other download.
+- **Data meter.** Estimates today's data use (streams vs lite files) on Home, and warns once a day when you pass your limit. The numbers are estimates, not a meter reading from Android.
+- **Smart Shuffle.** A **Smart Shuffle** button in the player shuffles the current playlist, album, artist top tracks or Liked Songs with a real shuffle, skipping songs you played recently, so nothing repeats until every song has played once. Home also has a **Smart Shuffle Liked Songs** button and a few shuffle picks.
+
+## Honest limits — read this first
+
+- **It cannot download Spotify's own streams.** Spotify audio is locked (DRM). Only files from your own folder or free catalogues go offline. If a song has no small file anywhere, it still needs data to stream.
+- **It cannot force Spotify's stream to a lower bitrate.** For streams, the real data saver is Myspoti itself: turn on **Data Saver** and set quality to **Low** in Myspoti → Settings → Playback (see setup below).
+- **Myspoti blocks ads, which is against Spotify's Terms of Use.** Spotify may suspend accounts that do it. That is Myspoti's own warning, not mine — use it at your own risk.
+- **Archive.org matches are rare** for new commercial songs. It is a bonus for older, live and public-domain recordings, not the main source. Your own folder is the main source.
+
+## Install
+
+In Myspoti: **Settings → Extensions → Install from an address**, paste this repo address, and install:
+
+```
+https://github.com/emanueltonda188-byte/myspoti-lite
+```
+
+Or install the `extension.zip` from the [latest release](../../releases/latest). The install screen lists everything the extension can do — read it, tick the box, install.
+
+## Setup (do this once)
+
+1. **Put it first.** Settings → Playback → audio sources: move **MySpoti Lite** above Spotify, so it is asked first. Same in Settings → Downloads for the download source.
+2. **Small downloads.** Settings → Downloads → quality: **Small**. Small files are re-encoded to small AAC on the phone, so they take the least space and data.
+3. **Low streams.** Settings → Playback → quality: **Low**, and turn on **Data Saver**. This is what makes Spotify's own streams use less data — the extension cannot do that part.
+4. **Optional: your own music folder** (below). Without it, the extension only finds the occasional free copy.
+
+## Your own music folder (the offline source)
+
+If you have MP3s of your own — your own recordings, songs you own as files — put them in a web folder with an `index.json` next to them, then paste the folder URL in the extension's settings (**Your own music folder URL**). A free way to host it: a public GitHub repo with GitHub Pages on.
+
+`index.json` — one entry per file:
+
+```json
+[
+  { "isrc": "USUM71200905", "title": "Money Trees", "artist": "Kendrick Lamar", "durationMs": 308000, "file": "money-trees.mp3" },
+  { "title": "Dior", "artist": "Pop Smoke", "durationMs": 213000, "file": "dior.mp3" }
+]
+```
+
+- `isrc` is best (exact match). Without it, title + artist must match exactly, and `durationMs` must be within 3 seconds when present.
+- `file` is the file name in the same folder. Keep the files small — encode at 96 kbps MP3 and a 3-minute song is ~2 MB.
+- Make the index with the helper: `python3 tools/make_index.py ~/Music --out index.json` (reads MP3 tags when `mutagen` is installed, otherwise uses `Artist - Title.mp3` file names).
+
+## Settings
+
+| Setting | What it does |
+|---|---|
+| Lite quality (per network) | Smallest: prefer the small file, including free copies. Balanced: your folder only, no Archive.org lookup. Best: step aside, let Spotify play full quality. Set it per network — Smallest on mobile data, Best on Wi-Fi, for example. |
+| Your own music folder URL | Where your `index.json` + MP3s live. Empty = no own folder. |
+| Try free copies too | Also look on Archive.org when your folder has nothing. |
+| Smart Shuffle: no repeats | Skip recently played songs until the whole list played once. |
+| Songs to remember | How many recently played songs shuffle avoids (default 50). |
+| Warn me after (MB per day) | Daily data warning level (default 100 MB). |
+
+## Data estimates
+
+The meter estimates Spotify streams at 160 kbps (~1.2 MB per minute) and lite files at 96 kbps (~0.7 MB per minute). Real use varies with the quality you picked in Myspoti. Downloads are counted when they start.
+
+## For developers
+
+This is a standard Myspoti extension (API v1): `manifest.json` + `main.js`, packaged as a zip. Validate and test with the `myspoti-ext` tool from the Myspoti repo:
+
+```
+./gradlew :extensions-cli:installDist
+myspoti-ext check ./myspoti-lite
+myspoti-ext test ./myspoti-lite --scenario test/scenario-no-match.json
+myspoti-ext test ./myspoti-lite --scenario test/scenario-own-library.json
+myspoti-ext pack ./myspoti-lite
+```
+
+`test/harness.js` is a second check that runs the hooks against a stubbed `myspoti` object in Node, no phone needed: `node test/harness.js`.
+
+## License
+
+MIT. Not affiliated with or endorsed by Spotify or Myspoti.
