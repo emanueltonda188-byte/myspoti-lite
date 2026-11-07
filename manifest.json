@@ -56,7 +56,7 @@
   "apiVersion": 1,
   "author": "Tonda",
   "category": "tools",
-  "changelog": "Renamed to Culture. AutoMix (on by default): shuffles flow like a DJ set \u2014 calm songs first, building to high energy \u2014 instead of jumping around at random; turn it off in settings for a plain random shuffle. DJ Culture: a DJ set from Liked Songs, ordered by energy, that announces each pick (\"now X \u2014 up next: Y\") in a short note.",
+  "changelog": "Fix: welcome steps cut from 6 to 5 \u2014 Myspoti only accepts 5, so 1.2.0 refused to install. Everything else is the same as 1.2.0 (Culture, AutoMix, DJ Culture).",
   "description": "Culture \u2014 low-data listening for Myspoti: tiny audio first, unstoppable playback, small downloads for offline, a data meter, Smart Shuffle, Moods, AutoMix and DJ Culture.",
   "homepage": "https://github.com/emanueltonda188-byte/myspoti-lite",
   "id": "ke.tonda.myspoti_lite",
@@ -131,16 +131,15 @@
     "dj",
     "automix"
   ],
-  "version": "1.2.0",
-  "versionCode": 3,
+  "version": "1.2.1",
+  "versionCode": 4,
   "welcome": {
     "message": "Culture plays small files first so songs use little data, resolves the next song early so it never stops, downloads small files for offline, shuffles without repeats, sorts Liked Songs into Moods, mixes them with AutoMix, and DJ Culture plays a set from your Liked Songs.",
     "steps": [
       "In Myspoti, put Culture above Spotify in Settings, Playback (audio) and Downloads.",
       "Set Downloads quality to Small for the tiniest offline files.",
       "Turn on Myspoti's own Data Saver and Low quality for Spotify streams.",
-      "Tap a mood on Home to see its songs, or Mood mix in the player.",
-      "Tap Start DJ Culture set on Home for a DJ set from your Liked Songs.",
+      "Tap a mood on Home to see its songs, or Start DJ Culture set for a DJ set from your Liked Songs.",
       "Optional: add your own music folder URL in the extension settings."
     ]
   }

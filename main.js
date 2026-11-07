@@ -1,4 +1,4 @@
-// Culture 1.2.0 — a Myspoti extension for low-data listening.
+// Culture 1.2.1 — a Myspoti extension for low-data listening.
 //
 // What it does:
 //   - Small audio first: when a small file of the song exists (your own music
@@ -38,7 +38,7 @@
 //     notes, so the DJ talks through those. The smooth blend between songs
 //     is Myspoti's own crossfade (Settings, Playback) — turn it on for the
 //     full mix feeling.
-myspoti.log('culture 1.2.0 loaded');
+myspoti.log('culture 1.2.1 loaded');
 
 var EXT_ID = 'ke.tonda.myspoti_lite';
 var INDEX_TTL_MS = 60 * 60 * 1000;     // re-read your folder index hourly

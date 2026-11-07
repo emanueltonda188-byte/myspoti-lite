@@ -3,6 +3,8 @@
 A [Myspoti](https://github.com/kota-zo/myspoti) extension for low-data listening: small audio first, unstoppable playback, small downloads for offline, a data meter, a true no-repeat Smart Shuffle, Moods, AutoMix, and DJ Culture.
 
 > The repo is still `myspoti-lite`, so the install address does not change. Only the extension's name changed, to **Culture** (v1.2.0). The extension id is unchanged, so updating keeps working.
+>
+> 1.2.1 fixes the install — the welcome steps are now 5, the most Myspoti accepts (1.2.0 had 6 and refused to install).
 
 ## What it does
 
