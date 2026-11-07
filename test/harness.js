@@ -18,7 +18,7 @@ const notifications = [];
 const playedCalls = [];
 const settings = {
   quality: 'Smallest', ccSources: true, ownLibrary: '',
-  shuffleNoRepeat: true, recentWindow: 50, dataWarningMb: 100,
+  shuffleNoRepeat: true, recentWindow: 50, dataWarningMb: 100, automix: true,
 };
 const httpCalls = {};
 const httpRoutes = [];
@@ -287,6 +287,72 @@ check('cleared mood view has buttons again', (home4[1].blocks || []).some((b) =>
 resetAll();
 callHook('tap', { action: 'unstoppable' });
 check('unstoppable button tells how to download', notifications.some((t) => t.indexOf('Download') >= 0), JSON.stringify(notifications));
+
+// 20. Rename: Home says Culture, with AutoMix state and a DJ button
+resetAll();
+settings.automix = true;
+settings.ownLibrary = 'https://example.com/music';
+const home5 = callHook('home', {});
+check('home section is now named Culture', home5[0].title === 'Culture — low data', home5[0].title);
+const dataText = (home5[0].blocks || []).filter((b) => b.type === 'text')[0].text;
+check('home says AutoMix is on', dataText.indexOf('AutoMix on') >= 0, dataText);
+check('home has a DJ Culture button', (home5[0].blocks || []).some((b) => b.action === 'dj-start'));
+
+// Energy of each stub track, by its moods: Lofi Rain chill 1, California
+// Love rap+nostalgia 5, Rainy Days nostalgia 5, Party Rock party 6, the
+// Kendrick/Pop Smoke songs rap 7.
+const ENERGY = { 'spotify:track:aaa': 7, 'spotify:track:bbb': 7, 'spotify:track:ccc': 7, 'spotify:track:ddd': 7, 'spotify:track:eee': 1, 'spotify:track:fff': 5, 'spotify:track:ggg': 6, 'spotify:track:hhh': 5 };
+function energiesNonDecreasing(order) {
+  let prev = -1;
+  for (let i = 0; i < order.length; i++) {
+    const e = ENERGY[order[i]];
+    if (e == null || e < prev) return false;
+    prev = e;
+  }
+  return true;
+}
+
+// 21. AutoMix on: a shuffle flows calm to high energy
+resetAll();
+settings.automix = true;
+callHook('tap', { action: 'smart-shuffle' });
+const autoOrder = playedCalls.length ? playedCalls[0].order : [];
+check('automix orders the shuffle calm to high energy', autoOrder.length === 8 && energiesNonDecreasing(autoOrder), JSON.stringify(autoOrder));
+
+// 22. AutoMix off: a plain shuffle still plays every song once
+resetAll();
+settings.automix = false;
+callHook('tap', { action: 'smart-shuffle' });
+const plainOrder = playedCalls.length ? playedCalls[0].order : [];
+check('automix off still plays every song once', plainOrder.length === 8 && new Set(plainOrder).size === 8, JSON.stringify(plainOrder));
+settings.automix = true;
+
+// 23. DJ Culture: a set from Liked Songs, ordered by energy
+resetAll();
+settings.automix = true;
+callHook('tap', { action: 'dj-start' });
+check('dj start plays Liked Songs', playedCalls.length === 1 && playedCalls[0].ctx === 'spotify:collection:tracks', JSON.stringify(playedCalls));
+const djOrder = playedCalls.length ? playedCalls[0].order : [];
+check('dj set is ordered calm to high energy', djOrder.length === 7 && energiesNonDecreasing(djOrder), JSON.stringify(djOrder));
+check('dj start notifies', notifications.some((t) => t.indexOf('DJ Culture on: 7 songs') === 0));
+check('dj start remembers the set', store['dj.on'] === true && Array.isArray(store['dj.queue']) && store['dj.queue'].length === 7);
+
+// 24. DJ Culture: announces picks, ends when the user moves on or the set ends
+fireEvent('playback', { type: 'start', track: { uri: 'spotify:track:eee', title: 'Lofi Rain', artist: 'Chillhop Music' }, origin: 'audio-source', playedMs: 0 });
+check('dj announces the next pick', notifications.some((t) => t.indexOf('DJ Culture: now Lofi Rain — up next: ') === 0), JSON.stringify(notifications));
+fireEvent('playback', { type: 'start', track: { uri: 'spotify:track:zzz', title: 'No Such Song', artist: 'Nobody' }, origin: 'spotify', playedMs: 0 });
+check('dj stops when the user plays something else', store['dj.on'] === false);
+resetAll();
+callHook('tap', { action: 'dj-start' });
+const q = store['dj.queue'];
+fireEvent('playback', { type: 'start', track: { uri: q[q.length - 1].uri, title: q[q.length - 1].title }, origin: 'audio-source', playedMs: 0 });
+check('dj announces the end of the set', notifications.some((t) => t.indexOf('end of the set') >= 0), JSON.stringify(notifications));
+check('dj is off after the set ends', store['dj.on'] === false);
+resetAll();
+callHook('tap', { action: 'dj-start' });
+callHook('tap', { action: 'dj-stop' });
+check('dj stop turns it off', store['dj.on'] === false && Array.isArray(store['dj.queue']) && store['dj.queue'].length === 0);
+check('dj stop notifies', notifications.some((t) => t.indexOf('DJ Culture off') === 0));
 
 console.log(failures === 0 ? '\nAll checks passed.' : '\n' + failures + ' check(s) failed.');
 process.exit(failures === 0 ? 0 : 1);
