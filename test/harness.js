@@ -18,7 +18,7 @@ const notifications = [];
 const playedCalls = [];
 const settings = {
   quality: 'Smallest', ccSources: true, ownLibrary: '',
-  shuffleNoRepeat: true, recentWindow: 50, dataWarningMb: 100, automix: true,
+  shuffleNoRepeat: true, recentWindow: 50, dataWarningMb: 100, automix: true, djAutoplay: true,
 };
 const httpCalls = {};
 const httpRoutes = [];
@@ -296,7 +296,7 @@ const home5 = callHook('home', {});
 check('home section is now named Culture', home5[0].title === 'Culture — low data', home5[0].title);
 const dataText = (home5[0].blocks || []).filter((b) => b.type === 'text')[0].text;
 check('home says AutoMix is on', dataText.indexOf('AutoMix on') >= 0, dataText);
-check('home has a DJ Culture button', (home5[0].blocks || []).some((b) => b.action === 'dj-start'));
+check('home has an Auto DJ button', (home5[0].blocks || []).some((b) => b.action === 'dj-start' && b.label === 'Start Auto DJ'));
 
 // Energy of each stub track, by its moods: Lofi Rain chill 1, California
 // Love rap+nostalgia 5, Rainy Days nostalgia 5, Party Rock party 6, the
@@ -334,25 +334,79 @@ callHook('tap', { action: 'dj-start' });
 check('dj start plays Liked Songs', playedCalls.length === 1 && playedCalls[0].ctx === 'spotify:collection:tracks', JSON.stringify(playedCalls));
 const djOrder = playedCalls.length ? playedCalls[0].order : [];
 check('dj set is ordered calm to high energy', djOrder.length === 7 && energiesNonDecreasing(djOrder), JSON.stringify(djOrder));
-check('dj start notifies', notifications.some((t) => t.indexOf('DJ Culture on: 7 songs') === 0));
-check('dj start remembers the set', store['dj.on'] === true && Array.isArray(store['dj.queue']) && store['dj.queue'].length === 7);
+check('dj start notifies', notifications.some((t) => t.indexOf('Auto DJ on: 7 songs') === 0));
+check('dj start remembers the set', store['dj.on'] === true && Array.isArray(store['dj.queue']) && store['dj.queue'].length === 7 && store['dj.label'] === 'Auto DJ');
 
-// 24. DJ Culture: announces picks, ends when the user moves on or the set ends
+// 24. Auto DJ: announces picks, ends when the user moves on, autoplays
 fireEvent('playback', { type: 'start', track: { uri: 'spotify:track:eee', title: 'Lofi Rain', artist: 'Chillhop Music' }, origin: 'audio-source', playedMs: 0 });
-check('dj announces the next pick', notifications.some((t) => t.indexOf('DJ Culture: now Lofi Rain — up next: ') === 0), JSON.stringify(notifications));
+check('dj announces the next pick', notifications.some((t) => t.indexOf('Auto DJ: now Lofi Rain — up next: ') === 0), JSON.stringify(notifications));
 fireEvent('playback', { type: 'start', track: { uri: 'spotify:track:zzz', title: 'No Such Song', artist: 'Nobody' }, origin: 'spotify', playedMs: 0 });
 check('dj stops when the user plays something else', store['dj.on'] === false);
 resetAll();
+settings.djAutoplay = true;
 callHook('tap', { action: 'dj-start' });
 const q = store['dj.queue'];
-fireEvent('playback', { type: 'start', track: { uri: q[q.length - 1].uri, title: q[q.length - 1].title }, origin: 'audio-source', playedMs: 0 });
+const lastTrack = q[q.length - 1];
+fireEvent('playback', { type: 'start', track: { uri: lastTrack.uri, title: lastTrack.title }, origin: 'audio-source', playedMs: 0 });
 check('dj announces the end of the set', notifications.some((t) => t.indexOf('end of the set') >= 0), JSON.stringify(notifications));
-check('dj is off after the set ends', store['dj.on'] === false);
+check('dj stays on after the last track starts (autoplay waits for it to finish)', store['dj.on'] === true);
+fireEvent('playback', { type: 'end', reason: 'finished', track: { uri: lastTrack.uri }, playedMs: 0 });
+check('autoplay starts a fresh set when the set ends', playedCalls.length === 2 && playedCalls[1].ctx === 'spotify:collection:tracks', JSON.stringify(playedCalls));
+check('autoplay notifies the fresh set', notifications.filter((t) => t.indexOf('Auto DJ on: 7 songs') === 0).length === 2);
+check('dj is still on after autoplay', store['dj.on'] === true && Array.isArray(store['dj.queue']) && store['dj.queue'].length === 7);
+settings.djAutoplay = false;
+resetAll();
+callHook('tap', { action: 'dj-start' });
+const q2 = store['dj.queue'];
+const last2 = q2[q2.length - 1];
+fireEvent('playback', { type: 'start', track: { uri: last2.uri, title: last2.title }, origin: 'audio-source', playedMs: 0 });
+fireEvent('playback', { type: 'end', reason: 'finished', track: { uri: last2.uri }, playedMs: 0 });
+check('autoplay off ends the dj when the set ends', playedCalls.length === 1 && store['dj.on'] === false);
+settings.djAutoplay = true;
 resetAll();
 callHook('tap', { action: 'dj-start' });
 callHook('tap', { action: 'dj-stop' });
 check('dj stop turns it off', store['dj.on'] === false && Array.isArray(store['dj.queue']) && store['dj.queue'].length === 0);
-check('dj stop notifies', notifications.some((t) => t.indexOf('DJ Culture off') === 0));
+check('dj stop notifies', notifications.some((t) => t.indexOf('Auto DJ off') === 0));
+
+// 25. Auto DJ for you: your most-played songs come first in each band
+resetAll();
+settings.djAutoplay = true;
+store['recent'] = ['spotify:track:aaa', 'spotify:track:ccc']; // Money Trees + Alright: Kendrick, rap
+callHook('tap', { action: 'dj-start' });
+const youOrder = playedCalls.length ? playedCalls[0].order : [];
+check('for-you set has every liked song once', youOrder.length === 7 && new Set(youOrder).size === 7, JSON.stringify(youOrder));
+check('for-you set puts the rap favorites before the other rap song',
+  youOrder.indexOf('spotify:track:bbb') > youOrder.indexOf('spotify:track:aaa') && youOrder.indexOf('spotify:track:bbb') > youOrder.indexOf('spotify:track:ccc'),
+  JSON.stringify(youOrder));
+check('for-you set puts California Love before Rainy Days in the same band',
+  youOrder.indexOf('spotify:track:fff') < youOrder.indexOf('spotify:track:hhh'), JSON.stringify(youOrder));
+
+// 26. DJ a mood: a set of that mood, announced as DJ <Mood>
+resetAll();
+store['mood.selected'] = 'rap';
+callHook('tap', { action: 'dj-mood' });
+check('dj mood plays from Liked Songs', playedCalls.length === 1 && playedCalls[0].ctx === 'spotify:collection:tracks', JSON.stringify(playedCalls));
+const moodDjOrder = playedCalls.length ? playedCalls[0].order : [];
+check('dj mood has the 4 rap songs', moodDjOrder.length === 4 && new Set(moodDjOrder).size === 4, JSON.stringify(moodDjOrder));
+check('dj mood flows calm first (California Love before the hard rap)',
+  moodDjOrder[0] === 'spotify:track:fff', JSON.stringify(moodDjOrder));
+check('dj mood notifies the mood label', notifications.some((t) => t.indexOf('DJ Rap on: 4 songs') === 0));
+check('dj mood remembers its label', store['dj.label'] === 'DJ Rap');
+
+// 27. DJ an artist: Home offers it while a song plays, and it plays that artist
+resetAll();
+fireEvent('playback', { type: 'start', track: { uri: 'spotify:track:aaa', title: 'Money Trees', artist: 'Kendrick Lamar' }, origin: 'spotify', playedMs: 0 });
+const home6 = callHook('home', {});
+const artistBtn = (home6[0].blocks || []).filter((b) => b.action === 'dj-artist')[0];
+check('home offers DJ for the artist playing', artistBtn && artistBtn.label === 'DJ Kendrick Lamar', JSON.stringify(artistBtn));
+callHook('tap', { action: 'dj-artist' });
+check('dj artist plays from the playlist playing', playedCalls.length === 1 && playedCalls[0].ctx === 'spotify:playlist:test123', JSON.stringify(playedCalls));
+const artistOrder = playedCalls.length ? playedCalls[0].order : [];
+check('dj artist has the 3 Kendrick songs once', artistOrder.length === 3 && new Set(artistOrder).size === 3 &&
+  artistOrder.indexOf('spotify:track:aaa') >= 0 && artistOrder.indexOf('spotify:track:ccc') >= 0 && artistOrder.indexOf('spotify:track:ddd') >= 0,
+  JSON.stringify(artistOrder));
+check('dj artist notifies the artist label', notifications.some((t) => t.indexOf('DJ Kendrick Lamar on: 3 songs') === 0));
 
 console.log(failures === 0 ? '\nAll checks passed.' : '\n' + failures + ' check(s) failed.');
 process.exit(failures === 0 ? 0 : 1);
