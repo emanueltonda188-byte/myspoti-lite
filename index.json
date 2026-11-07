@@ -65,7 +65,7 @@
       ],
       "homepage": "https://github.com/emanueltonda188-byte/myspoti-lite",
       "repo": "emanueltonda188-byte/myspoti-lite",
-      "url": "https://github.com/emanueltonda188-byte/myspoti-lite/releases/download/v1.2.0/extension.zip",
+      "url": "https://raw.githubusercontent.com/emanueltonda188-byte/myspoti-lite/main/extension.zip",
       "sha256": "1d1198d1b9d9058752b257501365a90549789cce514f558806f480a055b63108",
       "size": 55349,
       "icon_url": "icon.png",
