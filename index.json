@@ -4,11 +4,11 @@
     {
       "id": "ke.tonda.myspoti_lite",
       "name": "Culture",
-      "version": "1.2.1",
-      "versionCode": 4,
+      "version": "1.3.0",
+      "versionCode": 5,
       "apiVersion": 1,
       "author": "Tonda",
-      "description": "Culture \u2014 low-data listening for Myspoti: tiny audio first, unstoppable playback, small downloads for offline, a data meter, Smart Shuffle, Moods, AutoMix and DJ Culture.",
+      "description": "Culture \u2014 low-data listening for Myspoti: tiny audio first, unstoppable playback, small downloads for offline, a data meter, Smart Shuffle, Moods, AutoMix and Auto DJ.",
       "actions": [
         {
           "name": "audio.source",
@@ -66,8 +66,8 @@
       "homepage": "https://github.com/emanueltonda188-byte/myspoti-lite",
       "repo": "emanueltonda188-byte/myspoti-lite",
       "url": "https://raw.githubusercontent.com/emanueltonda188-byte/myspoti-lite/main/extension.zip",
-      "sha256": "42363ff904c933924bd9c0be45acecb77ff7167be60f31555518296f242e5582",
-      "size": 104584,
+      "sha256": "596845a92d77c23f198e6b5740f528337a426d324e04ca285237c5e242a6c70f",
+      "size": 106535,
       "icon_url": "icon.png",
       "updated_at": "2026-11-07",
       "min_app_version": "2.0.2",
@@ -78,10 +78,10 @@
         "shuffle",
         "low data",
         "moods",
-        "dj",
+        "auto dj",
         "automix"
       ],
-      "changelog": "Fix: welcome steps cut from 6 to 5 \u2014 Myspoti only accepts 5, so 1.2.0 refused to install. Everything else is the same as 1.2.0 (Culture, AutoMix, DJ Culture)."
+      "changelog": "Auto DJ: tap a mood for a DJ set of that mood, DJ the artist playing, or Start Auto DJ for a mix built from the songs you finish most. When a set ends, Auto DJ starts a fresh one by itself (turn it off in settings). DJ Culture is now Auto DJ."
     }
   ],
   "blocked": []

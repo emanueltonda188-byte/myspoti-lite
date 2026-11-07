@@ -1,4 +1,4 @@
-// Culture 1.2.1 — a Myspoti extension for low-data listening.
+// Culture 1.3.0 — a Myspoti extension for low-data listening.
 //
 // What it does:
 //   - Small audio first: when a small file of the song exists (your own music
@@ -20,8 +20,13 @@
 //   - AutoMix (on by default): shuffles flow like a DJ set — calm songs
 //     first, building to high energy — instead of jumping around at random.
 //     Turn it off in the extension settings for a plain random shuffle.
-//   - DJ Culture: a DJ set from your Liked Songs, ordered by energy, that
-//     announces each pick ("now playing X — up next: Y") in a short note.
+//   - Auto DJ: a DJ that mixes what you ask for, or what you always like.
+//     Tap a mood for a DJ set of that mood, DJ the artist of the song
+//     playing, or Start Auto DJ for a mix built from the songs you finish
+//     most — your favorites first in each part of the set. Every set is
+//     ordered by energy and announces each pick ("now X — up next: Y") in
+//     a short note. When a set ends, Auto DJ starts a fresh one by itself,
+//     like Spotify's autoplay (turn it off in the extension settings).
 //
 // What it cannot do (honest limits, also in README.md):
 //   - It cannot download Spotify's own streams. Spotify audio is locked
@@ -34,11 +39,14 @@
 //   - Moods are guessed from artist, title, album, genre and year. A song
 //     that matches nothing shows under no mood; your folder's index.json
 //     can tag a song's mood exactly (see README).
-//   - DJ Culture has no voice: Myspoti extensions can only show short text
+//   - Auto DJ has no voice: Myspoti extensions can only show short text
 //     notes, so the DJ talks through those. The smooth blend between songs
 //     is Myspoti's own crossfade (Settings, Playback) — turn it on for the
 //     full mix feeling.
-myspoti.log('culture 1.2.1 loaded');
+//   - Auto DJ has no recommendations engine: it only knows your Liked Songs
+//     and the songs you finish. It cannot find new songs the way Spotify's
+//     DJ does — it mixes the songs you already have.
+myspoti.log('culture 1.3.0 loaded');
 
 var EXT_ID = 'ke.tonda.myspoti_lite';
 var INDEX_TTL_MS = 60 * 60 * 1000;     // re-read your folder index hourly
@@ -139,7 +147,10 @@ myspoti.on('playback', function (e) {
       maybeWarn(d);
       return;
     }
-    if (e.type === 'end' && e.reason === 'finished' && uri) rememberPlayed(uri);
+    if (e.type === 'end' && e.reason === 'finished' && uri) {
+      rememberPlayed(uri);
+      try { djAutoplay(uri); } catch (err3) {}
+    }
     if (e.type === 'skip' || e.type === 'end') lastProgress = { uri: '', ms: 0 };
   } catch (err) { /* never break playback for the meter */ }
 });
@@ -213,6 +224,47 @@ function trackEnergy(track) {
   var low = 8;
   for (var i = 0; i < ms.length; i++) { var e = moodEnergy(ms[i]); if (e < low) low = e; }
   return low;
+}
+
+// ---- Taste: what you actually play ---------------------------------------
+// Auto DJ's "for you" mix learns only from the songs you finish (the
+// `recent` list) matched against your Liked Songs. There is no
+// recommendations engine here and no way to look a song up by itself, so a
+// finished song only counts when it is in Liked Songs.
+function tasteProfile() {
+  var profile = { moods: {}, artists: {} };
+  try {
+    var recent = storeGet('recent', []);
+    if (!Array.isArray(recent) || !recent.length) return profile;
+    var snap = likedSnapshot();
+    var byUri = {};
+    for (var i = 0; i < snap.liked.length; i++) if (snap.liked[i].uri) byUri[snap.liked[i].uri] = snap.liked[i];
+    for (var j = 0; j < recent.length; j++) {
+      var t = byUri[recent[j]];
+      if (!t) continue;
+      var ms = moodsOf(t);
+      for (var m = 0; m < ms.length; m++) profile.moods[ms[m]] = (profile.moods[ms[m]] || 0) + 1;
+      var as = trackArtists(t);
+      for (var a = 0; a < as.length; a++) { var key = norm(as[a]); profile.artists[key] = (profile.artists[key] || 0) + 1; }
+    }
+  } catch (e) {}
+  return profile;
+}
+function tasteScore(track, profile) {
+  var s = 0, ms = moodsOf(track);
+  for (var i = 0; i < ms.length; i++) s += (profile.moods[ms[i]] || 0);
+  var as = trackArtists(track);
+  for (var j = 0; j < as.length; j++) s += 2 * (profile.artists[norm(as[j])] || 0);
+  return s;
+}
+function sortByTaste(band, profile) {
+  // Your favorites first; ties shuffle so the set still varies.
+  var scored = [];
+  for (var i = 0; i < band.length; i++) scored.push({ t: band[i], s: tasteScore(band[i], profile), r: Math.random() });
+  scored.sort(function (a, b) { return (b.s - a.s) || (a.r - b.r); });
+  var out = [];
+  for (var j = 0; j < scored.length; j++) out.push(scored[j].t);
+  return out;
 }
 function trackTitle(t) { return (t && (t.title || t.name)) || ''; }
 function trackArtists(t) {
@@ -551,29 +603,34 @@ function unplayedTracks(tracks) {
   return tracks.slice(); // everything played: start a new round
 }
 
-function orderTracks(tracks, forceMix) {
-  // AutoMix on (or forced, for DJ Culture): order by energy, calm first,
-  // building to high energy, shuffled inside each energy band — like a DJ
-  // set. AutoMix off: a plain random shuffle.
-  var fresh = unplayedTracks(tracks);
-  var mix = forceMix || getSetting('automix', true) !== false;
-  if (!mix) return shuffleUris(fresh);
+function orderTracks(tracks, opts) {
+  // opts: mix (force the energy flow), taste (favorites first in each band),
+  // fresh (skip songs played recently). Defaults: AutoMix setting for the
+  // flow, no taste order, recently played songs go last.
+  opts = opts || {};
+  var list = (opts.fresh === false) ? tracks.slice() : unplayedTracks(tracks);
+  var mix = opts.mix || getSetting('automix', true) !== false;
+  if (!mix) return shuffleUris(list);
+  var profile = opts.taste ? tasteProfile() : null;
   var bands = {};
-  for (var i = 0; i < fresh.length; i++) {
-    var e = trackEnergy(fresh[i]);
+  for (var i = 0; i < list.length; i++) {
+    var e = trackEnergy(list[i]);
     if (!bands[e]) bands[e] = [];
-    bands[e].push(fresh[i]);
+    bands[e].push(list[i]);
   }
   var keys = Object.keys(bands).map(Number).sort(function (a, b) { return a - b; });
   var out = [];
-  for (var k = 0; k < keys.length; k++) out = out.concat(shuffleUris(bands[keys[k]]));
+  for (var k = 0; k < keys.length; k++) {
+    var band = bands[keys[k]];
+    out = out.concat(profile ? sortByTaste(band, profile) : shuffleUris(band));
+  }
   return out;
 }
 
-function playShuffled(contextUri, tracks, what, forceMix) {
+function playShuffled(contextUri, tracks, what, opts) {
   var player = spotifyPlayer();
   if (!player) { myspoti.notify('Smart Shuffle needs Myspoti 2.0.2 or newer'); return null; }
-  var ordered = orderTracks(tracks, forceMix);
+  var ordered = orderTracks(tracks, opts);
   var order = trackUris(ordered);
   player.play(contextUri, order[0], 0, 0, order);
   try { player.setShuffle(true); } catch (e) {}
@@ -669,50 +726,124 @@ function shuffleLiked() {
   }
 }
 
-// ---- DJ Culture -----------------------------------------------------------
-// A DJ set from Liked Songs, ordered by energy (calm first, building up),
-// that announces each pick in a short note: "now X — up next: Y". No voice:
-// extensions can only show text notes. The set ends when the queue runs out
-// or the user plays something outside it.
+// ---- Auto DJ ------------------------------------------------------------
+// A DJ that mixes what you ask for, or what you always like — the way
+// Spotify Premium's DJ and autoplay do, as far as this API allows:
+//   - Start Auto DJ: a mix of your Liked Songs built from the songs you
+//     finish most (your favorites first in each part of the set).
+//   - DJ a mood: a set of that mood, from the mood view.
+//   - DJ an artist: a set of the artist of the song playing, from the list
+//     playing (or Liked Songs when there is no list).
+// Every set is ordered by energy (calm first, building up) and announces
+// each pick in a short note: "<label>: now X — up next: Y". No voice:
+// extensions can only show text notes. When a set ends, Auto DJ starts a
+// fresh one by itself when the "keep playing" setting is on.
+
+function startDjSet(label, contextUri, tracks, byTaste) {
+  var ordered = playShuffled(contextUri, tracks, label, { mix: true, taste: !!byTaste, fresh: false });
+  if (!ordered) return false;
+  var queue = [];
+  for (var i = 0; i < ordered.length; i++) queue.push({ uri: ordered[i].uri, title: trackTitle(ordered[i]) });
+  storeSet('dj.on', true);
+  storeSet('dj.queue', queue);
+  storeSet('dj.label', label);
+  refreshHome();
+  return true;
+}
 
 function djStart() {
   try {
     var tracks = likedTracksAll();
-    if (tracks.length < 5) { myspoti.notify('Like a few songs first, then DJ Culture'); return; }
-    var ordered = playShuffled('spotify:collection:tracks', tracks, 'DJ Culture', true);
-    if (!ordered) return;
-    var queue = [];
-    for (var i = 0; i < ordered.length; i++) queue.push({ uri: ordered[i].uri, title: trackTitle(ordered[i]) });
-    storeSet('dj.on', true);
-    storeSet('dj.queue', queue);
-    refreshHome();
+    if (tracks.length < 5) { myspoti.notify('Like a few songs first, then Auto DJ'); return; }
+    startDjSet('Auto DJ', 'spotify:collection:tracks', tracks, true);
   } catch (e) {
     myspoti.log('dj start failed: ' + e);
-    myspoti.notify('DJ Culture could not start');
+    myspoti.notify('Auto DJ could not start');
+  }
+}
+
+function djMood() {
+  try {
+    var selected = storeGet('mood.selected', '');
+    if (!selected || !isMoodId(selected)) { myspoti.notify('Pick a mood first'); return; }
+    var tracks = moodTracks(selected);
+    if (tracks.length < 2) { myspoti.notify('Only ' + tracks.length + ' ' + moodLabel(selected) + ' song' + (tracks.length === 1 ? '' : 's') + ' in Liked Songs'); return; }
+    startDjSet('DJ ' + moodLabel(selected), 'spotify:collection:tracks', tracks, false);
+  } catch (e) {
+    myspoti.log('dj mood failed: ' + e);
+    myspoti.notify('Could not DJ that mood');
+  }
+}
+
+function djArtist() {
+  try {
+    var t = currentTrack;
+    if (!t || !trackTitle(t)) { myspoti.notify('Play a song first, then DJ its artist'); return; }
+    var artists = trackArtists(t);
+    if (!artists.length) { myspoti.notify('Play a song first, then DJ its artist'); return; }
+    var artist = artists[0];
+    var ctx = null, tracks = null;
+    try {
+      var player = spotifyPlayer();
+      var st = player ? player.state() : null;
+      ctx = st && st.contextUri;
+      if (ctx) tracks = tracksOf(ctx);
+    } catch (e) { tracks = null; }
+    if (!tracks || !tracks.length) { ctx = 'spotify:collection:tracks'; tracks = likedTracksAll(); }
+    var want = norm(artist);
+    var same = [];
+    for (var i = 0; i < tracks.length; i++) {
+      var as = trackArtists(tracks[i]);
+      for (var j = 0; j < as.length; j++) if (norm(as[j]) === want) { same.push(tracks[i]); break; }
+    }
+    if (same.length < 2) { myspoti.notify('Only ' + same.length + ' song' + (same.length === 1 ? '' : 's') + ' by ' + artist + ' here'); return; }
+    startDjSet('DJ ' + artist, ctx, same, false);
+  } catch (e) {
+    myspoti.log('dj artist failed: ' + e);
+    myspoti.notify('Could not DJ this artist here');
   }
 }
 
 function djStop() {
   storeSet('dj.on', false);
   storeSet('dj.queue', []);
-  myspoti.notify('DJ Culture off — back to normal.');
+  storeSet('dj.label', '');
+  myspoti.notify('Auto DJ off — back to normal.');
   refreshHome();
 }
 
 function djAnnounce(track) {
   if (!storeGet('dj.on', false) || !track || !track.uri) return;
+  var label = storeGet('dj.label', '') || 'Auto DJ';
   var queue = storeGet('dj.queue', []);
   if (!Array.isArray(queue) || !queue.length) { storeSet('dj.on', false); return; }
   var idx = -1;
   for (var i = 0; i < queue.length; i++) if (queue[i].uri === track.uri) { idx = i; break; }
-  if (idx < 0) { storeSet('dj.on', false); storeSet('dj.queue', []); return; } // moved on: the set is over
+  if (idx < 0) { storeSet('dj.on', false); storeSet('dj.queue', []); storeSet('dj.label', ''); return; } // moved on: the set is over
   if (idx + 1 < queue.length) {
-    myspoti.notify('DJ Culture: now ' + trackTitle(track) + ' — up next: ' + queue[idx + 1].title);
+    myspoti.notify(label + ': now ' + trackTitle(track) + ' — up next: ' + queue[idx + 1].title);
   } else {
-    myspoti.notify('DJ Culture: ' + trackTitle(track) + ' — that is the end of the set.');
+    myspoti.notify(label + ': ' + trackTitle(track) + ' — that is the end of the set.');
+    // Do not switch the DJ off here: the 'end' event decides — autoplay
+    // starts a fresh set, or the DJ switches off when the song finishes.
+  }
+}
+
+// Called when a track finishes. If it was the last track of a DJ set:
+// autoplay on starts a fresh mix by itself; autoplay off ends the DJ.
+function djAutoplay(finishedUri) {
+  if (!storeGet('dj.on', false)) return;
+  var queue = storeGet('dj.queue', []);
+  if (!Array.isArray(queue) || !queue.length) return;
+  if (queue[queue.length - 1].uri !== finishedUri) return;
+  if (getSetting('djAutoplay', true) === false) {
     storeSet('dj.on', false);
     storeSet('dj.queue', []);
+    storeSet('dj.label', '');
+    refreshHome();
+    return;
   }
+  djStart();
 }
 
 // ---- Player button, Home, taps, status ------------------------------------
@@ -747,6 +878,7 @@ function moodsSection(snap) {
       { type: 'text', text: moodLabel(selected) + ' · ' + tracks.length + ' song' + (tracks.length === 1 ? '' : 's') + ' from Liked Songs.' },
       { type: 'tracks', title: moodLabel(selected), items: items },
       { type: 'button', label: 'Play ' + moodLabel(selected) + ' shuffled', icon: 'shuffle', action: 'mood-play' },
+      { type: 'button', label: 'DJ ' + moodLabel(selected), icon: 'radio', action: 'dj-mood' },
       { type: 'button', label: 'All moods', icon: 'music', action: 'mood-clear' }
     ] };
   }
@@ -783,9 +915,15 @@ myspoti.provide('home', function () {
     { type: 'button', label: 'Smart Shuffle Liked Songs', icon: 'shuffle', action: 'shuffle-liked' },
     { type: 'button', label: 'Make it unstoppable', icon: 'download', action: 'unstoppable' },
     { type: 'button', label: 'How much data today?', icon: 'chart', action: 'show-data' },
-    { type: 'button', label: djOn ? 'Stop DJ Culture' : 'Start DJ Culture set', icon: 'radio', action: djOn ? 'dj-stop' : 'dj-start' }
+    { type: 'button', label: djOn ? 'Stop Auto DJ' : 'Start Auto DJ', icon: 'radio', action: djOn ? 'dj-stop' : 'dj-start' }
   ] }];
-  if (djOn) blocks[0].blocks.push({ type: 'text', text: 'DJ Culture is on — it announces each pick as it plays.' });
+  if (djOn) blocks[0].blocks.push({ type: 'text', text: 'Auto DJ is on — it announces each pick as it plays.' });
+  try {
+    if (currentTrack) {
+      var nowArtists = trackArtists(currentTrack);
+      if (nowArtists.length) blocks[0].blocks.push({ type: 'button', label: 'DJ ' + nowArtists[0], icon: 'radio', action: 'dj-artist' });
+    }
+  } catch (e) { /* Home still shows without the artist button */ }
   try {
     var liked = snap.liked;
     if (liked.length) {
@@ -813,6 +951,8 @@ myspoti.provide('tap', function (e) {
     else if (e.action === 'shuffle-liked') shuffleLiked();
     else if (e.action === 'dj-start') djStart();
     else if (e.action === 'dj-stop') djStop();
+    else if (e.action === 'dj-mood') djMood();
+    else if (e.action === 'dj-artist') djArtist();
     else if (e.action === 'mood-mix') moodMix();
     else if (e.action === 'mood-play') playMood();
     else if (e.action === 'mood-clear') { storeSet('mood.selected', ''); refreshHome(); }

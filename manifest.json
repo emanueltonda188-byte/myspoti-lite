@@ -56,8 +56,8 @@
   "apiVersion": 1,
   "author": "Tonda",
   "category": "tools",
-  "changelog": "Fix: welcome steps cut from 6 to 5 \u2014 Myspoti only accepts 5, so 1.2.0 refused to install. Everything else is the same as 1.2.0 (Culture, AutoMix, DJ Culture).",
-  "description": "Culture \u2014 low-data listening for Myspoti: tiny audio first, unstoppable playback, small downloads for offline, a data meter, Smart Shuffle, Moods, AutoMix and DJ Culture.",
+  "changelog": "Auto DJ: tap a mood for a DJ set of that mood, DJ the artist playing, or Start Auto DJ for a mix built from the songs you finish most. When a set ends, Auto DJ starts a fresh one by itself (turn it off in settings). DJ Culture is now Auto DJ.",
+  "description": "Culture \u2014 low-data listening for Myspoti: tiny audio first, unstoppable playback, small downloads for offline, a data meter, Smart Shuffle, Moods, AutoMix and Auto DJ.",
   "homepage": "https://github.com/emanueltonda188-byte/myspoti-lite",
   "id": "ke.tonda.myspoti_lite",
   "minAppVersion": "2.0.2",
@@ -108,6 +108,14 @@
       "type": "toggle"
     },
     {
+      "default": true,
+      "description": "When a DJ set ends, start a fresh mix by itself, like Spotify autoplay. Off: the DJ stops at the end of the set.",
+      "key": "djAutoplay",
+      "label": "Auto DJ: keep playing",
+      "section": "playback",
+      "type": "toggle"
+    },
+    {
       "default": 50,
       "description": "How many recently played songs Smart Shuffle avoids repeating.",
       "key": "recentWindow",
@@ -128,18 +136,18 @@
     "shuffle",
     "low data",
     "moods",
-    "dj",
+    "auto dj",
     "automix"
   ],
-  "version": "1.2.1",
-  "versionCode": 4,
+  "version": "1.3.0",
+  "versionCode": 5,
   "welcome": {
-    "message": "Culture plays small files first so songs use little data, resolves the next song early so it never stops, downloads small files for offline, shuffles without repeats, sorts Liked Songs into Moods, mixes them with AutoMix, and DJ Culture plays a set from your Liked Songs.",
+    "message": "Culture plays small files first so songs use little data, resolves the next song early so it never stops, downloads small files for offline, shuffles without repeats, sorts Liked Songs into Moods, mixes them with AutoMix, and Auto DJ plays a set of what you ask for or what you always like.",
     "steps": [
       "In Myspoti, put Culture above Spotify in Settings, Playback (audio) and Downloads.",
       "Set Downloads quality to Small for the tiniest offline files.",
       "Turn on Myspoti's own Data Saver and Low quality for Spotify streams.",
-      "Tap a mood on Home to see its songs, or Start DJ Culture set for a DJ set from your Liked Songs.",
+      "Tap a mood on Home, Start Auto DJ for a mix of what you like, or DJ the artist playing.",
       "Optional: add your own music folder URL in the extension settings."
     ]
   }
