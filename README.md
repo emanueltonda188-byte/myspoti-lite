@@ -1,12 +1,16 @@
-# MySpoti Lite
+# Culture
 
-A [Myspoti](https://github.com/kota-zo/myspoti) extension for low-data listening: small audio first, unstoppable playback, small downloads for offline, a data meter, a true no-repeat Smart Shuffle, and Moods.
+A [Myspoti](https://github.com/kota-zo/myspoti) extension for low-data listening: small audio first, unstoppable playback, small downloads for offline, a data meter, a true no-repeat Smart Shuffle, Moods, AutoMix, and DJ Culture.
+
+> The repo is still `myspoti-lite`, so the install address does not change. Only the extension's name changed, to **Culture** (v1.2.0). The extension id is unchanged, so updating keeps working.
 
 ## What it does
 
 - **Small audio first.** When a small file of the song exists — in your own music folder, or as a free legal copy on Archive.org — it plays that instead of the full Spotify stream. A 3-minute song at ~96 kbps is about 2 MB instead of 4–5 MB. When no small file exists, it steps aside and Spotify streams as usual.
 - **Unstoppable.** Myspoti asks for the next song 10 s after the one before starts, and the extension resolves its small file right then, so the next song starts at once — on Wi-Fi Myspoti also pre-reads the first 512 KB of it. A small file is only ~2 MB, so it buffers fully in seconds, and a data drop mid-song does not stop it. Home shows how many of your Liked Songs have a small file, and the **Make it unstoppable** button tells you how to download the list: downloaded songs play with data fully off.
 - **Moods.** Rap, Chill, Nostalgia, Party, Workout, Focus, Sleep, Happy, Sad and Love. Home has a Moods section: tap one and it shows all its songs from your Liked Songs, with a button to play them shuffled. In the player, the Smart Shuffle button becomes **Mood mix** when the song playing has a mood — it plays more of that mood from whatever playlist, album or Liked Songs is playing. Moods are guessed from artist, title, album, genre and year (a song before 2000 is nostalgia); your own music folder can tag a song's mood exactly (below).
+- **AutoMix (on by default).** Shuffles flow like a DJ set instead of jumping around at random: calm songs first (Sleep, Chill, Focus), building through Love, Happy and Nostalgia to Party, Rap and Workout, shuffled inside each step. It applies to Smart Shuffle, Mood mix and DJ Culture. Turn it off in the extension settings for a plain random shuffle.
+- **DJ Culture.** A DJ set from your Liked Songs: tap **Start DJ Culture set** on Home and it plays the whole list ordered by energy, calm first building to a peak, and announces each pick in a short note — "DJ Culture: now X — up next: Y". The set ends when the queue runs out, or when you play something outside it. Tap **Stop DJ Culture** to end it early.
 - **Offline.** The same small files can be downloaded (pick **Small** quality in Myspoti → Downloads) and then play with no data at all. Downloads are encrypted and kept by Myspoti, like any other download.
 - **Data meter.** Estimates today's data use (streams vs lite files) on Home, and warns once a day when you pass your limit. The numbers are estimates, not a meter reading from Android.
 - **Smart Shuffle.** A **Smart Shuffle** button in the player shuffles the current playlist, album, artist top tracks or Liked Songs with a real shuffle, skipping songs you played recently, so nothing repeats until every song has played once. Home also has a **Smart Shuffle Liked Songs** button and a few shuffle picks.
@@ -17,6 +21,7 @@ A [Myspoti](https://github.com/kota-zo/myspoti) extension for low-data listening
 - **It cannot force Spotify's stream to a lower bitrate.** For streams, the real data saver is Myspoti itself: turn on **Data Saver** and set quality to **Low** in Myspoti → Settings → Playback (see setup below).
 - **It cannot make a Spotify stream unstoppable.** A song with no small file still streams, and a stream can stall when the data dies. The fix is a small file for that song (your folder) or a downloaded list — the extension can only make unstoppable the songs it has a small file for.
 - **Moods are guesses.** They come from artist, title, album, genre and year, so a song can land in the wrong mood or in none at all. Your folder's `index.json` can set a song's mood exactly with a `"mood"` field (below), and `make_index.py` writes it from the MP3's genre tag.
+- **DJ Culture has no voice.** Myspoti extensions can only show short text notes, so the DJ talks through those ("now X — up next: Y"). The smooth blend between songs is Myspoti's own crossfade — turn it on in Myspoti → Settings → Playback for the full mix feeling.
 - **Myspoti blocks ads, which is against Spotify's Terms of Use.** Spotify may suspend accounts that do it. That is Myspoti's own warning, not mine — use it at your own risk.
 - **Archive.org matches are rare** for new commercial songs. It is a bonus for older, live and public-domain recordings, not the main source. Your own folder is the main source.
 

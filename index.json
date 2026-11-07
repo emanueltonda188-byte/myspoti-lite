@@ -3,12 +3,12 @@
   "extensions": [
     {
       "id": "ke.tonda.myspoti_lite",
-      "name": "MySpoti Lite",
-      "version": "1.1.0",
-      "versionCode": 2,
+      "name": "Culture",
+      "version": "1.2.0",
+      "versionCode": 3,
       "apiVersion": 1,
       "author": "Tonda",
-      "description": "Low-data listening for Myspoti: tiny audio first, unstoppable playback, small downloads for offline, a data meter, Smart Shuffle, and Moods (Rap, Chill, Nostalgia and more).",
+      "description": "Culture \u2014 low-data listening for Myspoti: tiny audio first, unstoppable playback, small downloads for offline, a data meter, Smart Shuffle, Moods, AutoMix and DJ Culture.",
       "actions": [
         {
           "name": "audio.source",
@@ -65,11 +65,11 @@
       ],
       "homepage": "https://github.com/emanueltonda188-byte/myspoti-lite",
       "repo": "emanueltonda188-byte/myspoti-lite",
-      "url": "https://github.com/emanueltonda188-byte/myspoti-lite/releases/download/v1.1.0/extension.zip",
-      "sha256": "ae055d3cc6c0db7c0bbd2899850e86ab71b552794915376b6b846434ed7b76d4",
-      "size": 53425,
+      "url": "https://github.com/emanueltonda188-byte/myspoti-lite/releases/download/v1.2.0/extension.zip",
+      "sha256": "1d1198d1b9d9058752b257501365a90549789cce514f558806f480a055b63108",
+      "size": 55349,
       "icon_url": "icon.png",
-      "updated_at": "2026-11-06",
+      "updated_at": "2026-11-07",
       "min_app_version": "2.0.2",
       "category": "tools",
       "tags": [
@@ -77,9 +77,11 @@
         "offline",
         "shuffle",
         "low data",
-        "moods"
+        "moods",
+        "dj",
+        "automix"
       ],
-      "changelog": "Moods: Rap, Chill, Nostalgia, Party, Workout, Focus, Sleep, Happy, Sad and Love on Home \u2014 tap one to see its songs from Liked Songs, or Mood mix in the player for more of the mood playing. Unstoppable: the next song is resolved 10 s early so it starts at once, and Home shows how many Liked Songs have a small file for offline."
+      "changelog": "Renamed to Culture. AutoMix (on by default): shuffles flow like a DJ set \u2014 calm songs first, building to high energy \u2014 instead of jumping around at random; turn it off in settings for a plain random shuffle. DJ Culture: a DJ set from Liked Songs, ordered by energy, that announces each pick (\"now X \u2014 up next: Y\") in a short note."
     }
   ],
   "blocked": []

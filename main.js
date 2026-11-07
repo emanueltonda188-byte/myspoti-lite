@@ -1,4 +1,4 @@
-// MySpoti Lite 1.1.0 — a Myspoti extension for low-data listening.
+// Culture 1.2.0 — a Myspoti extension for low-data listening.
 //
 // What it does:
 //   - Small audio first: when a small file of the song exists (your own music
@@ -17,6 +17,11 @@
 //     Sad and Love. Tap a mood on Home to see its songs from Liked Songs;
 //     the player button becomes "Mood mix" and plays more of the mood of
 //     the song that is playing, from whatever list is playing.
+//   - AutoMix (on by default): shuffles flow like a DJ set — calm songs
+//     first, building to high energy — instead of jumping around at random.
+//     Turn it off in the extension settings for a plain random shuffle.
+//   - DJ Culture: a DJ set from your Liked Songs, ordered by energy, that
+//     announces each pick ("now playing X — up next: Y") in a short note.
 //
 // What it cannot do (honest limits, also in README.md):
 //   - It cannot download Spotify's own streams. Spotify audio is locked
@@ -29,7 +34,11 @@
 //   - Moods are guessed from artist, title, album, genre and year. A song
 //     that matches nothing shows under no mood; your folder's index.json
 //     can tag a song's mood exactly (see README).
-myspoti.log('myspoti-lite 1.1.0 loaded');
+//   - DJ Culture has no voice: Myspoti extensions can only show short text
+//     notes, so the DJ talks through those. The smooth blend between songs
+//     is Myspoti's own crossfade (Settings, Playback) — turn it on for the
+//     full mix feeling.
+myspoti.log('culture 1.2.0 loaded');
 
 var EXT_ID = 'ke.tonda.myspoti_lite';
 var INDEX_TTL_MS = 60 * 60 * 1000;     // re-read your folder index hourly
@@ -109,6 +118,7 @@ myspoti.on('playback', function (e) {
     var uri = e.track.uri || '';
     if (e.type === 'start') {
       currentTrack = e.track || null;
+      try { djAnnounce(e.track); } catch (err2) {}
       lastProgress = { uri: uri, ms: 0 };
       var d0 = loadDay();
       if (e.origin === 'spotify') d0.streamed = (d0.streamed || 0) + 1;
@@ -140,7 +150,7 @@ function maybeWarn(d) {
   var key = 'warned.' + todayKey();
   if (storeGet(key, false)) return;
   storeSet(key, true);
-  myspoti.notify('MySpoti Lite: today is already ~' + Math.round(dayTotalMb(d)) + ' MB. Lite files and downloads use less.');
+  myspoti.notify('Culture: today is already ~' + Math.round(dayTotalMb(d)) + ' MB. Lite files and downloads use less.');
 }
 
 function rememberPlayed(uri) {
@@ -165,18 +175,18 @@ var currentTrack = null; // last song that started playing (for Mood mix)
 // nostalgia. Nothing here is stored per song: it is computed when needed.
 
 var MOODS = [
-  { id: 'rap', label: 'Rap', keywords: ['rap', 'hip hop', 'hiphop', 'trap', 'drill', 'freestyle', 'cypher', 'mixtape'],
+  { id: 'rap', label: 'Rap', energy: 7, keywords: ['rap', 'hip hop', 'hiphop', 'trap', 'drill', 'freestyle', 'cypher', 'mixtape'],
     artists: ['kendrick lamar', 'eminem', 'drake', 'j cole', 'pop smoke', 'travis scott', '21 savage', 'lil baby', 'future', 'kanye west', 'jay z', 'nas', 'tupac', '2pac', 'notorious b i g', 'biggie', 'snoop dogg', 'ice cube', 'dr dre', 'nicki minaj', 'cardi b', 'megan thee stallion', 'doja cat', 'lil wayne', 'rick ross', 'meek mill', 'lil durk', 'polo g', 'central cee', 'stormzy', 'dave', 'skepta'] },
-  { id: 'chill', label: 'Chill', keywords: ['lofi', 'lo fi', 'chill', 'acoustic', 'unplugged', 'mellow', 'calm', 'ambient', 'soft', 'slow', 'coffee', 'sunday morning', 'bedroom'], artists: [] },
-  { id: 'nostalgia', label: 'Nostalgia', keywords: ['old school', 'oldschool', 'classic', 'throwback', 'retro', 'vintage', '90s', '80s', '70s', 'greatest hits', 'remember', 'back in the day'],
+  { id: 'chill', label: 'Chill', energy: 1, keywords: ['lofi', 'lo fi', 'chill', 'acoustic', 'unplugged', 'mellow', 'calm', 'ambient', 'soft', 'slow', 'coffee', 'sunday morning', 'bedroom'], artists: [] },
+  { id: 'nostalgia', label: 'Nostalgia', energy: 5, keywords: ['old school', 'oldschool', 'classic', 'throwback', 'retro', 'vintage', '90s', '80s', '70s', 'greatest hits', 'remember', 'back in the day'],
     artists: ['tupac', '2pac', 'notorious b i g', 'biggie', 'bob marley', 'michael jackson', 'whitney houston', 'queen', 'the beatles', 'abba', 'elton john', 'madonna', 'prince', 'stevie wonder', 'marvin gaye', 'aretha franklin', 'james brown', 'fela kuti', 'brenda fassie', 'lucky dube'] },
-  { id: 'party', label: 'Party', keywords: ['party', 'club', 'dance', 'turn up', 'lit', 'shots', 'weekend', 'fiesta', 'celebration'], artists: [] },
-  { id: 'workout', label: 'Workout', keywords: ['workout', 'gym', 'running', 'training', 'pump', 'beast mode', 'energy', 'adrenaline'], artists: [] },
-  { id: 'focus', label: 'Focus', keywords: ['focus', 'study', 'concentration', 'deep work', 'instrumental', 'piano', 'classical', 'study beats', 'lofi beats'], artists: [] },
-  { id: 'sleep', label: 'Sleep', keywords: ['sleep', 'lullaby', 'dream', 'insomnia', 'rain sounds', 'white noise', 'night sounds'], artists: [] },
-  { id: 'happy', label: 'Happy', keywords: ['happy', 'sunshine', 'good vibes', 'feel good', 'summer', 'smile', 'joy', 'bright'], artists: [] },
-  { id: 'sad', label: 'Sad', keywords: ['sad', 'heartbreak', 'broken', 'tears', 'lonely', 'miss you', 'goodbye', 'pain', 'cry', 'hurt'], artists: [] },
-  { id: 'love', label: 'Love', keywords: ['love', 'romantic', 'romance', 'baby', 'darling', 'forever', 'wedding', 'valentine', 'my heart'], artists: [] }
+  { id: 'party', label: 'Party', energy: 6, keywords: ['party', 'club', 'dance', 'turn up', 'lit', 'shots', 'weekend', 'fiesta', 'celebration'], artists: [] },
+  { id: 'workout', label: 'Workout', energy: 8, keywords: ['workout', 'gym', 'running', 'training', 'pump', 'beast mode', 'energy', 'adrenaline'], artists: [] },
+  { id: 'focus', label: 'Focus', energy: 2, keywords: ['focus', 'study', 'concentration', 'deep work', 'instrumental', 'piano', 'classical', 'study beats', 'lofi beats'], artists: [] },
+  { id: 'sleep', label: 'Sleep', energy: 0, keywords: ['sleep', 'lullaby', 'dream', 'insomnia', 'rain sounds', 'white noise', 'night sounds'], artists: [] },
+  { id: 'happy', label: 'Happy', energy: 4, keywords: ['happy', 'sunshine', 'good vibes', 'feel good', 'summer', 'smile', 'joy', 'bright'], artists: [] },
+  { id: 'sad', label: 'Sad', energy: 2, keywords: ['sad', 'heartbreak', 'broken', 'tears', 'lonely', 'miss you', 'goodbye', 'pain', 'cry', 'hurt'], artists: [] },
+  { id: 'love', label: 'Love', energy: 3, keywords: ['love', 'romantic', 'romance', 'baby', 'darling', 'forever', 'wedding', 'valentine', 'my heart'], artists: [] }
 ];
 
 var GENRE_MOODS = {
@@ -194,6 +204,16 @@ var GENRE_MOODS = {
 
 function moodLabel(id) { for (var i = 0; i < MOODS.length; i++) if (MOODS[i].id === id) return MOODS[i].label; return id; }
 function isMoodId(id) { for (var i = 0; i < MOODS.length; i++) if (MOODS[i].id === id) return true; return false; }
+function moodEnergy(id) { for (var i = 0; i < MOODS.length; i++) if (MOODS[i].id === id) return MOODS[i].energy; return 4; }
+function trackEnergy(track) {
+  // The calmest mood the track carries, so a chill+party song sits low and
+  // a set never spikes early. No mood at all: the middle of the scale.
+  var ms = moodsOf(track);
+  if (!ms.length) return 4;
+  var low = 8;
+  for (var i = 0; i < ms.length; i++) { var e = moodEnergy(ms[i]); if (e < low) low = e; }
+  return low;
+}
 function trackTitle(t) { return (t && (t.title || t.name)) || ''; }
 function trackArtists(t) {
   if (!t) return [];
@@ -514,38 +534,60 @@ function shuffleUris(uris) {
   return a;
 }
 
-function unplayedFirst(uris) {
-  if (getSetting('shuffleNoRepeat', true) === false) return uris;
+function unplayedTracks(tracks) {
+  // No repeats: songs played recently go last, until every song has had
+  // a turn.
+  if (getSetting('shuffleNoRepeat', true) === false) return tracks.slice();
   var recent = storeGet('recent', []);
-  if (!Array.isArray(recent) || !recent.length) return uris;
+  if (!Array.isArray(recent) || !recent.length) return tracks.slice();
   var fresh = [], i;
-  for (i = 0; i < uris.length; i++) if (recent.indexOf(uris[i]) < 0) fresh.push(uris[i]);
+  for (i = 0; i < tracks.length; i++) if (tracks[i] && tracks[i].uri && recent.indexOf(tracks[i].uri) < 0) fresh.push(tracks[i]);
   if (fresh.length >= 2) return fresh;
-  if (fresh.length === 1 && uris.length > 1) {
+  if (fresh.length === 1 && tracks.length > 1) {
     var rest = [];
-    for (i = 0; i < uris.length; i++) if (fresh.indexOf(uris[i]) < 0) rest.push(uris[i]);
+    for (i = 0; i < tracks.length; i++) if (fresh.indexOf(tracks[i]) < 0) rest.push(tracks[i]);
     return fresh.concat(shuffleUris(rest));
   }
-  return uris; // everything played: start a new round
+  return tracks.slice(); // everything played: start a new round
 }
 
-function playShuffled(contextUri, uris, what) {
+function orderTracks(tracks, forceMix) {
+  // AutoMix on (or forced, for DJ Culture): order by energy, calm first,
+  // building to high energy, shuffled inside each energy band — like a DJ
+  // set. AutoMix off: a plain random shuffle.
+  var fresh = unplayedTracks(tracks);
+  var mix = forceMix || getSetting('automix', true) !== false;
+  if (!mix) return shuffleUris(fresh);
+  var bands = {};
+  for (var i = 0; i < fresh.length; i++) {
+    var e = trackEnergy(fresh[i]);
+    if (!bands[e]) bands[e] = [];
+    bands[e].push(fresh[i]);
+  }
+  var keys = Object.keys(bands).map(Number).sort(function (a, b) { return a - b; });
+  var out = [];
+  for (var k = 0; k < keys.length; k++) out = out.concat(shuffleUris(bands[keys[k]]));
+  return out;
+}
+
+function playShuffled(contextUri, tracks, what, forceMix) {
   var player = spotifyPlayer();
-  if (!player) { myspoti.notify('Smart Shuffle needs Myspoti 2.0.2 or newer'); return false; }
-  var order = shuffleUris(unplayedFirst(uris));
+  if (!player) { myspoti.notify('Smart Shuffle needs Myspoti 2.0.2 or newer'); return null; }
+  var ordered = orderTracks(tracks, forceMix);
+  var order = trackUris(ordered);
   player.play(contextUri, order[0], 0, 0, order);
   try { player.setShuffle(true); } catch (e) {}
   myspoti.notify((what || 'Smart Shuffle') + ' on: ' + order.length + ' songs, no repeats');
-  return true;
+  return ordered;
 }
 
 function playMood() {
   try {
     var selected = storeGet('mood.selected', '');
     if (!selected || !isMoodId(selected)) { myspoti.notify('Pick a mood first'); return; }
-    var uris = trackUris(moodTracks(selected));
-    if (uris.length < 2) { myspoti.notify('Only ' + uris.length + ' ' + moodLabel(selected) + ' song' + (uris.length === 1 ? '' : 's') + ' in Liked Songs'); return; }
-    playShuffled('spotify:collection:tracks', uris, 'Mood mix: ' + moodLabel(selected));
+    var tracks = moodTracks(selected);
+    if (tracks.length < 2) { myspoti.notify('Only ' + tracks.length + ' ' + moodLabel(selected) + ' song' + (tracks.length === 1 ? '' : 's') + ' in Liked Songs'); return; }
+    playShuffled('spotify:collection:tracks', tracks, 'Mood mix: ' + moodLabel(selected));
   } catch (e) {
     myspoti.log('play mood failed: ' + e);
     myspoti.notify('Could not play that mood');
@@ -570,9 +612,8 @@ function moodMix() {
     for (var i = 0; i < tracks.length; i++) {
       if (moodsOf(tracks[i]).indexOf(mood) >= 0) same.push(tracks[i]);
     }
-    var uris = trackUris(same);
-    if (uris.length < 2) { myspoti.notify('Only ' + uris.length + ' ' + moodLabel(mood) + ' song' + (uris.length === 1 ? '' : 's') + ' here'); return; }
-    playShuffled(ctx, uris, 'Mood mix: ' + moodLabel(mood));
+    if (same.length < 2) { myspoti.notify('Only ' + same.length + ' ' + moodLabel(mood) + ' song' + (same.length === 1 ? '' : 's') + ' here'); return; }
+    playShuffled(ctx, same, 'Mood mix: ' + moodLabel(mood));
   } catch (e) {
     myspoti.log('mood mix failed: ' + e);
     myspoti.notify('Mood mix could not start here');
@@ -607,9 +648,9 @@ function smartShuffle() {
     try { st = player.state(); } catch (e) { st = null; }
     var ctx = st && st.contextUri;
     if (!ctx) { myspoti.notify('Play a playlist, album or Liked Songs first, then Smart Shuffle'); return; }
-    var uris = trackUris(tracksOf(ctx));
-    if (!uris || uris.length < 2) { myspoti.notify('Not enough songs here to shuffle'); return; }
-    playShuffled(ctx, uris);
+    var tracks = tracksOf(ctx);
+    if (!tracks || tracks.length < 2) { myspoti.notify('Not enough songs here to shuffle'); return; }
+    playShuffled(ctx, tracks);
   } catch (e) {
     myspoti.log('smart shuffle failed: ' + e);
     myspoti.notify('Smart Shuffle could not start here');
@@ -619,12 +660,58 @@ function smartShuffle() {
 function shuffleLiked() {
   try {
     var page = myspoti.spotify.library.likedTracks(0, 50);
-    var uris = trackUris(page && page.items);
-    if (!uris || uris.length < 2) { myspoti.notify('Like a few songs first, then shuffle them'); return; }
-    playShuffled('spotify:collection:tracks', uris);
+    var items = (page && page.items) || [];
+    if (!items || items.length < 2) { myspoti.notify('Like a few songs first, then shuffle them'); return; }
+    playShuffled('spotify:collection:tracks', items);
   } catch (e) {
     myspoti.log('shuffle liked failed: ' + e);
     myspoti.notify('Could not shuffle Liked Songs');
+  }
+}
+
+// ---- DJ Culture -----------------------------------------------------------
+// A DJ set from Liked Songs, ordered by energy (calm first, building up),
+// that announces each pick in a short note: "now X — up next: Y". No voice:
+// extensions can only show text notes. The set ends when the queue runs out
+// or the user plays something outside it.
+
+function djStart() {
+  try {
+    var tracks = likedTracksAll();
+    if (tracks.length < 5) { myspoti.notify('Like a few songs first, then DJ Culture'); return; }
+    var ordered = playShuffled('spotify:collection:tracks', tracks, 'DJ Culture', true);
+    if (!ordered) return;
+    var queue = [];
+    for (var i = 0; i < ordered.length; i++) queue.push({ uri: ordered[i].uri, title: trackTitle(ordered[i]) });
+    storeSet('dj.on', true);
+    storeSet('dj.queue', queue);
+    refreshHome();
+  } catch (e) {
+    myspoti.log('dj start failed: ' + e);
+    myspoti.notify('DJ Culture could not start');
+  }
+}
+
+function djStop() {
+  storeSet('dj.on', false);
+  storeSet('dj.queue', []);
+  myspoti.notify('DJ Culture off — back to normal.');
+  refreshHome();
+}
+
+function djAnnounce(track) {
+  if (!storeGet('dj.on', false) || !track || !track.uri) return;
+  var queue = storeGet('dj.queue', []);
+  if (!Array.isArray(queue) || !queue.length) { storeSet('dj.on', false); return; }
+  var idx = -1;
+  for (var i = 0; i < queue.length; i++) if (queue[i].uri === track.uri) { idx = i; break; }
+  if (idx < 0) { storeSet('dj.on', false); storeSet('dj.queue', []); return; } // moved on: the set is over
+  if (idx + 1 < queue.length) {
+    myspoti.notify('DJ Culture: now ' + trackTitle(track) + ' — up next: ' + queue[idx + 1].title);
+  } else {
+    myspoti.notify('DJ Culture: ' + trackTitle(track) + ' — that is the end of the set.');
+    storeSet('dj.on', false);
+    storeSet('dj.queue', []);
   }
 }
 
@@ -688,13 +775,17 @@ myspoti.provide('home', function () {
   if (next && next.title && (Date.now() - (next.at || 0)) < 10 * 60 * 1000) {
     offLine += ' Next up: ' + next.title + (next.lite ? ' — small file ready.' : ' — streams on Spotify.');
   }
-  var blocks = [{ type: 'section', title: 'MySpoti Lite — low data', blocks: [
-    { type: 'text', text: line + '. Small files play first; downloads work offline.' },
+  var automixOn = getSetting('automix', true) !== false;
+  var djOn = storeGet('dj.on', false);
+  var blocks = [{ type: 'section', title: 'Culture — low data', blocks: [
+    { type: 'text', text: line + '. Small files play first; downloads work offline. AutoMix ' + (automixOn ? 'on — shuffles flow calm to high energy.' : 'off — shuffles are random.') },
     { type: 'text', text: offLine },
     { type: 'button', label: 'Smart Shuffle Liked Songs', icon: 'shuffle', action: 'shuffle-liked' },
     { type: 'button', label: 'Make it unstoppable', icon: 'download', action: 'unstoppable' },
-    { type: 'button', label: 'How much data today?', icon: 'chart', action: 'show-data' }
+    { type: 'button', label: 'How much data today?', icon: 'chart', action: 'show-data' },
+    { type: 'button', label: djOn ? 'Stop DJ Culture' : 'Start DJ Culture set', icon: 'radio', action: djOn ? 'dj-stop' : 'dj-start' }
   ] }];
+  if (djOn) blocks[0].blocks.push({ type: 'text', text: 'DJ Culture is on — it announces each pick as it plays.' });
   try {
     var liked = snap.liked;
     if (liked.length) {
@@ -720,6 +811,8 @@ myspoti.provide('tap', function (e) {
     if (!e) return;
     if (e.action === 'smart-shuffle') smartShuffle();
     else if (e.action === 'shuffle-liked') shuffleLiked();
+    else if (e.action === 'dj-start') djStart();
+    else if (e.action === 'dj-stop') djStop();
     else if (e.action === 'mood-mix') moodMix();
     else if (e.action === 'mood-play') playMood();
     else if (e.action === 'mood-clear') { storeSet('mood.selected', ''); refreshHome(); }
